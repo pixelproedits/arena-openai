@@ -79,11 +79,21 @@ class CodexVerification(unittest.TestCase):
             (home / "AGENTS.md").write_text(block)
             rendered = [{"role": "user", "content": [{"text": "# AGENTS.md instructions\n" + block}]}]
             # This path executes only the deterministic local invocation parser.
-            result = VERIFY.verify_routing(skill, home, "unused-codex", rendered)
+            with mock.patch.object(VERIFY, "_run_json", wraps=VERIFY._run_json) as parser_calls:
+                result = VERIFY.verify_routing(skill, home, "unused-codex", rendered)
             self.assertTrue(result["explicit_alias_parser_controls_passed"])
             self.assertTrue(result["native_default_prompt_parser_passed"])
+            self.assertTrue(result["native_menu_link_parser_passed"])
+            self.assertTrue(result["native_selected_skill_parser_passed"])
             self.assertFalse(result["native_at_mention_registration"])
             self.assertFalse((home / "arena-runs").exists())
+            selected_skill = str((skill / "SKILL.md").resolve())
+            menu_input = "[$arena](" + selected_skill + ") 5\nCompare synthetic proposals."
+            self.assertTrue(any(call.kwargs.get("input_text") == menu_input
+                                for call in parser_calls.call_args_list))
+            self.assertTrue(any(call.kwargs.get("input_text") == "5"
+                                and call.args[0][-2:] == ["--selected-skill", selected_skill]
+                                for call in parser_calls.call_args_list))
 
     def test_routing_refuses_missing_origin_metadata_or_inflated_budget(self):
         with tempfile.TemporaryDirectory(prefix="arena-routing-") as temporary:

@@ -1,3 +1,10 @@
+# Hardened fork 0.3.7
+
+- Support selecting Arena from the native `$` menu and typing `N`, including the exact serialized leading skill link and separately verified current selection metadata.
+- Bind menu links and the optional internal `--selected-skill` argument to the current helper's canonical `SKILL.md` path; reject bare numbers without selection, wrong paths/labels, embedded mentions and quoted examples.
+- Preserve plain `@arena N` / `$arena N`, direct-command authorization, exact Classic budgets, native scheduling and the existing guard/schema.
+- Extend offline parser and local verification controls for menu inputs without starting workers or writing run state.
+
 # Hardened fork 0.3.6
 
 - Remove the fork's fresh-thread-per-job restriction: independent initial candidates may continue their own Classic attack/defense/revision work through reserved native follow-up turns.

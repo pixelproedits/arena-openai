@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "arena-openai",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Classic-only native Codex tournaments authorized by one direct command with exact usage accounting."
 }

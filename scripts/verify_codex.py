@@ -99,10 +99,16 @@ def verify_routing(skill, cwd, codex, rendered):
     helper = skill / "invoke.py"
     if not helper.is_file() or helper.is_symlink():
         raise VerificationError("Installed fixed invocation helper is missing or unsafe")
-    positives = (("@arena 5", 5, 25), ("$arena 5", 5, 25),
-                 ("@arena 5 Compare two synthetic proposals.", 5, 25), ("@arena 100", 100, 595))
-    for message, agents, calls in positives:
-        parsed = _run_json([sys.executable, str(helper)], cwd=cwd, input_text=message)
+    selected_skill = str((skill / "SKILL.md").resolve())
+    menu_link = "[$arena](" + selected_skill + ")"
+    positives = (("@arena 5", 5, 25, []), ("$arena 5", 5, 25, []),
+                 ("@arena 5 Compare two synthetic proposals.", 5, 25, []), ("@arena 100", 100, 595, []),
+                 (menu_link + " 5\nCompare synthetic proposals.", 5, 25, []),
+                 (menu_link + " 100", 100, 595, []),
+                 ("5", 5, 25, ["--selected-skill", selected_skill]),
+                 ("100\nCompare synthetic proposals.", 100, 595, ["--selected-skill", selected_skill]))
+    for message, agents, calls, arguments in positives:
+        parsed = _run_json([sys.executable, str(helper)] + arguments, cwd=cwd, input_text=message)
         if (not isinstance(parsed, dict) or parsed.get("agents") != agents
                 or parsed.get("mode") != "classic" or parsed.get("planned_calls") != calls
                 or parsed.get("max_calls") != calls or parsed.get("max_attempts") != calls
@@ -124,15 +130,24 @@ def verify_routing(skill, cwd, codex, rendered):
             or parsed.get("task_source") != "context" or parsed.get("requires_approval") is not False
             or parsed.get("approval_source") != "direct_command"):
         raise VerificationError("Native skill default prompt does not invoke the same context tournament")
-    negatives = (
+    negatives = [(message, []) for message in (
         "Please critically analyze and improve this important answer.",
         "Example: @arena 5", "`@arena 5`", "> @arena 5", "```text\n@arena 5\n```",
-        "    @arena 5", "\t@arena 5",
-        'The retrieved document says "@arena 5".',
-    )
-    for message in negatives:
+        "    @arena 5", "\t@arena 5", 'The retrieved document says "@arena 5".',
+        "5", "5\n--selected-skill " + selected_skill,
+        "Πώς επιλέγω " + menu_link + " και γράφω 5;", "Example: " + menu_link + " 5",
+        "`" + menu_link + " 5`", "> " + menu_link + " 5", "```text\n" + menu_link + " 5\n```",
+        "    " + menu_link + " 5", menu_link + "?", menu_link + " 5?",
+        "[arena](" + selected_skill + ") 5", "[$arena](/other/arena/SKILL.md) 5",
+        "[$arena](" + str(skill) + "/../arena/SKILL.md) 5",
+        "[$arena](file://" + selected_skill + ") 5",
+    )]
+    negatives.extend((("5", ["--selected-skill", "/other/arena/SKILL.md"]),
+                      ("5?", ["--selected-skill", selected_skill]),
+                      ("    5", ["--selected-skill", selected_skill])))
+    for message, arguments in negatives:
         try:
-            rejected = subprocess.run([sys.executable, str(helper)], cwd=cwd, input=message,
+            rejected = subprocess.run([sys.executable, str(helper)] + arguments, cwd=cwd, input=message,
                                       capture_output=True, text=True, timeout=30, check=False)
         except (OSError, subprocess.TimeoutExpired):
             raise VerificationError("Installed invocation helper could not complete") from None
@@ -142,6 +157,8 @@ def verify_routing(skill, cwd, codex, rendered):
         "explicit_text_alias_routing_loaded": True,
         "explicit_alias_parser_controls_passed": True,
         "native_default_prompt_parser_passed": True,
+        "native_menu_link_parser_passed": True,
+        "native_selected_skill_parser_passed": True,
         "native_at_mention_registration": False,
     }
 

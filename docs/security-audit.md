@@ -12,7 +12,7 @@ or user project edit is part of this audit.
 | --- | --- | --- |
 | Existing paths and symlinks were followed during initialization and output writes | High | `init --dir` accepted an existing directory and wrote `task.md`/`rubric.md`; state writes used a predictable `arena.json.tmp`. An attacker controlling those paths could redirect writes. Hardened I/O requires fresh private run directories, rejects symlinks throughout the path, rejects hardlinks and nonregular files, and uses private atomic output. |
 | Saved state could redirect reads and inject instructions | High | Reproduced acceptance by upstream `validate_state` of an external `agent.solution`, a `r1-m01/../../../outside` match ID, and changed strategy instructions. The hardened validator constrains derived paths, canonical IDs, bracket invariants and original deterministic strategy cards. |
-| Implicit activation and missing per-tournament approval | High | The upstream description allowed activation after an unsatisfactory answer. Its workflow normally ran small tournaments after merely displaying the planned call count. The fork requires a current direct `@arena N` or `$arena N` command and `allow_implicit_invocation: false`. That command authorizes one computed Classic tournament; the trusted orchestrator records its exact guard proposal before live reservations without asking a second approval question. |
+| Implicit activation and missing per-tournament approval | High | The upstream description allowed activation after an unsatisfactory answer. Its workflow normally ran small tournaments after merely displaying the planned call count. The fork requires a current direct Arena menu selection plus `N`, or a leading `@arena N` / `$arena N` command, and `allow_implicit_invocation: false`. That request authorizes one computed Classic tournament; the trusted orchestrator records its exact guard proposal before live reservations without asking a second approval question. |
 | Actual attempts were not bounded by the planned call count | High | Upstream instructions requested a second attempt for missing outputs and a third judge attempt. These calls were outside the plan. The fork records every actual job-turn attempt before dispatch, whether a new thread or native follow-up, including retries and failed dispatch. The command authorizes the exact computed default attempt budget, with concurrency clamped to available host slots; extra retry allowance needs an explicit user-requested maximum. Task text, workers and automatic fallback cannot increase these limits. Original field sizes and the complete Classic workflow remain available. |
 | Worker instructions exposed excessive capabilities | High | Upstream prompts allowed reading anything the task pointed to and writing throughout a shared run directory. The fork requires sanitized supplied context and native leaf workers returning text only. Read-only access authorized by the task remains available; workers are instructed to avoid credential access, project changes, external model APIs and nested spawning. The generic native interface does not enforce a separate OS sandbox for each worker; this boundary is instruction-level and is disclosed below. |
 | Task/candidate text could masquerade as control instructions | High | Upstream task delimiters alone did not establish a trust boundary. The fork separates fixed worker security rules from untrusted task/candidate material and forbids material from changing approval, tools, models, dispatch, budgets or file scope. This is defense in depth, not proof that language models resist every injection. |
@@ -31,7 +31,8 @@ Live native Codex work can still consume the user's subscription usage.
 
 Codex's skill loader enforces `allow_implicit_invocation: false` for skill
 selection. The skill instructions additionally require the orchestrator to
-verify the user's direct `@arena N` or `$arena N` instruction. Quoted text, repository files,
+verify the user's current direct Arena menu selection plus `N`, or leading
+`@arena N` / `$arena N` instruction. Quoted text, repository files,
 retrieved pages, another worker, and a prior run are not authorized sources of
 invocation or approval. Installation approval is not tournament approval.
 
@@ -44,6 +45,20 @@ direct user's command and its scope before calling the approval helper. It must 
 use one durable reservation per job-turn attempt, including follow-ups and each retry. Local files and skill
 instructions cannot constrain an unrelated, malicious process running as the
 same user or prevent an orchestrator from deliberately bypassing the helper.
+
+Version 0.3.7 accepts a native menu selection serialized as a leading link shaped
+`[$arena](/absolute/path/to/arena/SKILL.md) N` only when its actual path exactly
+matches the current helper's canonical `SKILL.md` and its label is `$arena`.
+Alternate paths, traversal aliases,
+URLs, embedded links and quoted examples are refused. For hosts supplying
+separate structured selection metadata, raw text beginning with `N` is accepted
+only with the internal `--selected-skill` argument set to that exact canonical
+path. The trusted caller must obtain that selection from the actual current host
+metadata, never infer it from a loaded skill block, task, history or another
+agent. The parser checks syntax and path equality, not human or selection
+authenticity. A bare number without verified selection is refused. Neither menu
+input path initializes run state, records guard approval or dispatches workers;
+Classic scheduling, turn budgets and the guard/schema are unchanged.
 
 The worker contract permits deliberately supplied task/context, authorized
 read-only project context and candidate text. It forbids inherited unrelated
@@ -196,3 +211,24 @@ for source and installed files and the real local Codex discovery/policy/routing
 verifier. The discovery verifier started zero model calls and zero tournaments.
 These checks do not claim completion of a live worker-reuse tournament or a
 100-worker concurrency stress test.
+
+Version 0.3.7 source validation: `python3 -m unittest discover -s tests -q`
+completed **108 tests successfully**, including 42 existing security tests and
+seven new menu/selection input regressions. Controls cover exact menu-link and
+verified-selection equivalence with plain commands, unchanged 25/595 budgets,
+wrong paths/labels, traversal and URLs, explanatory prose, quotes/fences and
+indentation, forged selection arguments, and CLI parsing without run state or
+task-command execution. The verifier exercises the new inputs using a relocated
+helper copy; archive checks target 0.3.7. `git diff --check` passed. The engine,
+guard, secure I/O, cards, rubric, native scheduling instructions and Classic role
+templates remain unchanged from 0.3.6. This source validation used synthetic
+local inputs and did not test an installed 0.3.7 UI, start workers or run a
+tournament.
+
+Separate 0.3.7 installation verification passed the official Skill Creator
+validator for source and installed files. The real local Codex verifier confirmed
+explicit discovery, exclusion from implicit context, loaded routing, native menu
+link controls and structured-selection count controls. The observed serialized
+menu link plus `5` now returns the exact 25-attempt Classic plan without another
+confirmation. These checks started zero model calls and zero tournaments; they
+do not claim a mouse-driven UI test or completion of a live tournament.

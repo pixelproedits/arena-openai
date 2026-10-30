@@ -1,6 +1,6 @@
 interface:
   display_name: "Arena"
-  short_description: "Classic-only tournaments; use @arena N"
+  short_description: "Classic: select Arena from $ menu, then type N"
   default_prompt: "$arena 5"
 policy:
   allow_implicit_invocation: false

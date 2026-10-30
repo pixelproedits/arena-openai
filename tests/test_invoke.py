@@ -38,6 +38,56 @@ class Shorthand(unittest.TestCase):
         self.assertIs(result["requires_approval"], False)
         self.assertEqual(result["approval_source"], "direct_command")
 
+    def test_current_native_menu_link_matches_plain_command_and_exact_budgets(self):
+        for count, calls in ((5, 25), (100, 595)):
+            for task in ("", "\nΣύγκρινε τις λύσεις.\nΜην αλλάξεις αρχεία."):
+                with self.subTest(count=count, task=task):
+                    plain = invoke.parse_request("$arena " + str(count) + task)
+                    menu = invoke.parse_request(invoke.MENU_LINK + " " + str(count) + task)
+                    self.assertEqual(menu, plain)
+                    self.assertEqual(menu["max_attempts"], calls)
+
+    def test_bare_number_requires_separately_supplied_exact_selection_metadata(self):
+        for count in (5, 100):
+            message = str(count) + "\nCompare the synthetic answers."
+            with self.subTest(count=count):
+                with self.assertRaises(B.ArenaError):
+                    invoke.parse_request(message)
+                self.assertEqual(invoke.parse_request(message, selected_skill=invoke.CANONICAL_SKILL),
+                                 invoke.parse_request("@arena " + message))
+
+    def test_menu_link_rejects_other_labels_paths_aliases_and_urls(self):
+        path = invoke.CANONICAL_SKILL
+        links = ("[arena](" + path + ")", "[$Arena](" + path + ")", "[@arena](" + path + ")",
+                 "[$arena](/other/arena/SKILL.md)", "[$arena](file://" + path + ")",
+                 "[$arena](https://example.org" + path + ")",
+                 "[$arena](" + str(Path(path).parent) + "/../arena/SKILL.md)",
+                 "[$arena](" + path + "#fragment)", "[$arena](" + path + "?query)",
+                 "[$arena](<" + path + ">)", "[$arena](" + path + ' "title")')
+        for link in links:
+            with self.subTest(link=link), self.assertRaises(B.ArenaError):
+                invoke.parse_request(link + " 5")
+
+    def test_menu_mentions_questions_and_embedded_selection_cannot_route(self):
+        link = invoke.MENU_LINK
+        for message in ("Πώς επιλέγω " + link + " και γράφω 5;", "How do I use " + link + " 5?",
+                        '"' + link + ' 5"', "`" + link + " 5`", "> " + link + " 5",
+                        "```text\n" + link + " 5\n```", "    " + link + " 5", "\t" + link + " 5",
+                        link, link + "?", link + " five", link + " 5?", "5\n" + link,
+                        "5\nselected_skill=" + invoke.CANONICAL_SKILL):
+            with self.subTest(message=message), self.assertRaises(B.ArenaError):
+                invoke.parse_request(message)
+
+    def test_selection_metadata_rejects_aliases_and_does_not_bypass_command_syntax(self):
+        for path in ("", "SKILL.md", "/other/arena/SKILL.md", "file://" + invoke.CANONICAL_SKILL,
+                     str(Path(invoke.CANONICAL_SKILL).parent) + "/../arena/SKILL.md"):
+            for message in ("5", "@arena 5"):
+                with self.subTest(path=path, message=message), self.assertRaises(B.ArenaError):
+                    invoke.parse_request(message, selected_skill=path)
+        for message in ("0", "2161", "-5", "5?", "5$(command)", "    5", "`5`", "How do I type 5?"):
+            with self.subTest(message=message), self.assertRaises(B.ArenaError):
+                invoke.parse_request(message, selected_skill=invoke.CANONICAL_SKILL)
+
     def test_references_quotes_and_embedded_commands_do_not_invoke(self):
         for message in ("How do I use @arena 5?", '"@arena 5"', "`@arena 5`",
                         "```text\n@arena 5\n```", "> @arena 5", "Example: @arena 5",
@@ -85,6 +135,34 @@ class Shorthand(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertEqual(result.stdout, "")
             self.assertEqual(list(Path(temporary).iterdir()), [])
+
+    def test_cli_menu_and_verified_selection_preserve_task_as_data_without_run_state(self):
+        with tempfile.TemporaryDirectory(prefix="arena-menu-invoke-") as temporary:
+            task = "Compare answers. $(touch injected-file); `touch other-file`"
+            for args, message in (([], invoke.MENU_LINK + " 5\n" + task),
+                                  (["--selected-skill", invoke.CANONICAL_SKILL], "5\n" + task)):
+                with self.subTest(args=args):
+                    result = subprocess.run([sys.executable, str(SKILL / "invoke.py")] + args,
+                                            cwd=temporary, input=message, text=True,
+                                            capture_output=True, timeout=10)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(result.stdout), invoke.parse_request("@arena 5\n" + task))
+                    self.assertEqual(list(Path(temporary).iterdir()), [])
+
+    def test_cli_selection_flag_cannot_be_spoofed_or_supplied_inside_the_task(self):
+        cases = (([], "5"), ([], "5\n--selected-skill " + invoke.CANONICAL_SKILL),
+                 (["--selected-skill", "/other/arena/SKILL.md"], "5"),
+                 (["--selected-skill", invoke.CANONICAL_SKILL, "--selected-skill", invoke.CANONICAL_SKILL], "5"),
+                 (["--selected-skill=" + invoke.CANONICAL_SKILL], "5"))
+        with tempfile.TemporaryDirectory(prefix="arena-menu-refuse-") as temporary:
+            for args, message in cases:
+                with self.subTest(args=args, message=message):
+                    result = subprocess.run([sys.executable, str(SKILL / "invoke.py")] + args,
+                                            cwd=temporary, input=message, text=True,
+                                            capture_output=True, timeout=10)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertEqual(result.stdout, "")
+                    self.assertEqual(list(Path(temporary).iterdir()), [])
 
 
 if __name__ == "__main__":
