@@ -1,6 +1,6 @@
 # Arena - Classic-only native Codex fork
 
-Based on upstream v0.3.2, commit `adb206161c5d60d4dc9bbfa8757222744a93e568`, with security hardening and the user's requested Classic-only interface. This fork is version **0.3.4**. MIT attribution is preserved.
+Based on upstream v0.3.2, commit `adb206161c5d60d4dc9bbfa8757222744a93e568`, with security hardening and the user's requested Classic-only interface. This fork is version **0.3.5**. MIT attribution is preserved.
 
 ## Use
 
@@ -14,15 +14,15 @@ The number is the candidate count. Arena uses the clear pending task already bei
 
 **Classic is the only mode:** candidates produce solutions, attack each other's answers, defend and revise their own, then a separate judge decides each match. Five candidates require 25 planned native worker launches; 100 require 595. The removed shorter mode is not available in the engine, templates or fixtures. Old non-Classic records are refused unchanged.
 
-Before starting, Arena gives a short proposal with the task and total usage limit. A direct **yes** to that specific proposal is enough. Installing/updating the skill or typing the shortcut does not itself approve a tournament. The guard still binds the exact proposal internally; users do not need to type its technical confirmation token.
+Your current direct `@arena N` or `$arena N` command authorizes exactly one computed Classic tournament using native Codex usage. Arena states the task and total usage limit, then starts without a second approval question. The orchestrator obtains and records the guard's exact confirmation token internally. Installing/updating the skill, quoted examples and prior commands cannot authorize a tournament. Completion or a stop ends the command's authority; rerunning or resuming requires a new direct user instruction.
 
 ## Explicit-only routing
 
-`agents/openai.yaml` retains `policy.allow_implicit_invocation: false`. A narrow user-level `AGENTS.md` rule maps only a direct leading `@arena N`/`$arena N` command to the installed skill and deterministic `invoke.py` helper. The reviewed block is [integration/codex-routing.md](integration/codex-routing.md). Quoted commands, examples, code blocks, retrieved files, ordinary critical tasks and other agents cannot authorize invocation. The helper validates syntax and plans Classic usage; it does not launch workers, write run state or grant approval. The host must check that its input is the actual current user message.
+`agents/openai.yaml` retains `policy.allow_implicit_invocation: false`. A narrow user-level `AGENTS.md` rule maps only a direct leading `@arena N`/`$arena N` command to the installed skill and deterministic `invoke.py` helper. The reviewed block is [integration/codex-routing.md](integration/codex-routing.md). Quoted commands, examples, code blocks, retrieved files, ordinary critical tasks and other agents cannot authorize invocation. The helper returns `requires_approval: false` and `approval_source: "direct_command"`, meaning no separate confirmation is required when the host verifies the current direct user origin. It does not authenticate origin, launch workers, write run state or record guard approval.
 
 ## Security and usage
 
-All available distinct strategy cards, odd-field byes, optional requested blind baseline comparison and complete winning answers remain supported. The orchestrator computes the required internal ceiling from the requested count, then asks approval of the exact plan. Every native worker launch consumes a durable reservation before launch. Retries need additional explicitly approved allowance; up to 2 attempts per candidate/attack/defend job and 3 per judge/final are supported. No nested agents or hidden launches.
+All available distinct strategy cards, odd-field byes, optional requested blind baseline comparison and complete winning answers remain supported. The orchestrator computes the exact default attempt ceiling from the requested count and binds that plan to the command's authorization. Every native worker launch consumes a durable reservation before launch, including failed startup. Extra retry allowance needs an explicit user-requested maximum; up to 2 attempts per candidate/attack/defend job and 3 per judge/final are supported within the authorized ceiling. No nested agents, hidden launches or silent budget increases. Host capacity errors stop the run with the incomplete state disclosed.
 
 Workers use existing native Codex usage, without an external model API, model subprocess, API-key fallback or provider switch. They receive only their brief and authorized context (`fork_turns="none"`), inspect authorized sources with read-only tools and return text; the guarded engine writes canonical artifacts. Worker tool rules and human approval origin depend on the trusted orchestrator: generic native workers are not an OS sandbox. The ledger counts worker launch attempts, not their internal inference turns or tokens. See [the security audit](docs/security-audit.md).
 

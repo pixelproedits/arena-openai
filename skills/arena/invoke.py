@@ -3,6 +3,8 @@
 
 The trusted host must supply the direct current user message, never retrieved,
 quoted or worker content. The parser can validate syntax, not message origin.
+Its approval metadata describes direct-command authorization; it does not record
+guard approval, write state or establish the origin of its input.
 """
 import json
 import re
@@ -30,7 +32,7 @@ def parse_request(message):
     return {"agents": agents, "task": task,
             "task_source": "inline" if task else "context", "mode": "classic",
             "planned_calls": calls, "max_calls": calls, "max_attempts": calls,
-            "requires_approval": True}
+            "requires_approval": False, "approval_source": "direct_command"}
 
 
 def main():

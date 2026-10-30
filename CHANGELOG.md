@@ -1,3 +1,10 @@
+# Hardened fork 0.3.5
+
+- Treat the validated current direct `@arena N` / `$arena N` command as authorization for exactly one computed Classic tournament, without a second approval question.
+- Keep origin checks with the trusted orchestrator and record the exact guard proposal internally; parser metadata never authenticates origin or starts work.
+- Preserve exact default budgets, fingerprints, per-launch reservations and explicit-only policy; prohibit automatic reruns/resumes and silent extra calls.
+- Add offline controls for direct-command metadata, exact budgets and parser side-effect boundaries.
+
 # Hardened fork 0.3.4
 
 - Make Classic the only tournament mode and default across engine, prompts and fixtures.

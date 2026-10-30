@@ -99,12 +99,15 @@ def verify_routing(skill, cwd, codex, rendered):
     helper = skill / "invoke.py"
     if not helper.is_file() or helper.is_symlink():
         raise VerificationError("Installed fixed invocation helper is missing or unsafe")
-    positives = ("@arena 5", "$arena 5", "@arena 5 Compare two synthetic proposals.")
-    for message in positives:
+    positives = (("@arena 5", 5, 25), ("$arena 5", 5, 25),
+                 ("@arena 5 Compare two synthetic proposals.", 5, 25), ("@arena 100", 100, 595))
+    for message, agents, calls in positives:
         parsed = _run_json([sys.executable, str(helper)], cwd=cwd, input_text=message)
-        if (not isinstance(parsed, dict) or parsed.get("agents") != 5
-                or parsed.get("mode") != "classic" or parsed.get("planned_calls") != 25
-                or parsed.get("requires_approval") is not True):
+        if (not isinstance(parsed, dict) or parsed.get("agents") != agents
+                or parsed.get("mode") != "classic" or parsed.get("planned_calls") != calls
+                or parsed.get("max_calls") != calls or parsed.get("max_attempts") != calls
+                or parsed.get("requires_approval") is not False
+                or parsed.get("approval_source") != "direct_command"):
             raise VerificationError("Installed explicit invocation helper failed positive controls")
     metadata = (skill / "agents" / "openai.yaml").read_text(encoding="utf-8")
     defaults = re.findall(r"(?m)^  default_prompt: (\".*\")\s*$", metadata)
@@ -117,7 +120,9 @@ def verify_routing(skill, cwd, codex, rendered):
     parsed = _run_json([sys.executable, str(helper)], cwd=cwd, input_text=default_prompt)
     if (not isinstance(parsed, dict) or parsed.get("agents") != 5
             or parsed.get("mode") != "classic" or parsed.get("planned_calls") != 25
-            or parsed.get("task_source") != "context" or parsed.get("requires_approval") is not True):
+            or parsed.get("max_calls") != 25 or parsed.get("max_attempts") != 25
+            or parsed.get("task_source") != "context" or parsed.get("requires_approval") is not False
+            or parsed.get("approval_source") != "direct_command"):
         raise VerificationError("Native skill default prompt does not invoke the same context tournament")
     negatives = (
         "Please critically analyze and improve this important answer.",

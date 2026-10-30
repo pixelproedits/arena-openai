@@ -1,6 +1,7 @@
 """Offline verification logic: never launch an AI turn, even in the verifier."""
 import importlib.util
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest import mock
@@ -68,6 +69,40 @@ class CodexVerification(unittest.TestCase):
         block = VERIFY._routing_block(VERIFY.ROUTING_TEMPLATE.read_text())
         with self.assertRaises(VERIFY.VerificationError):
             VERIFY._routing_block(block + "\n" + block)
+
+    def test_routing_verifies_direct_command_budget_without_launching_a_turn(self):
+        with tempfile.TemporaryDirectory(prefix="arena-routing-") as temporary:
+            home = Path(temporary)
+            skill = home / "skills" / "arena"
+            shutil.copytree(VERIFY.ROUTING_TEMPLATE.parent.parent / "skills" / "arena", skill)
+            block = VERIFY._routing_block(VERIFY.ROUTING_TEMPLATE.read_text())
+            (home / "AGENTS.md").write_text(block)
+            rendered = [{"role": "user", "content": [{"text": "# AGENTS.md instructions\n" + block}]}]
+            # This path executes only the deterministic local invocation parser.
+            result = VERIFY.verify_routing(skill, home, "unused-codex", rendered)
+            self.assertTrue(result["explicit_alias_parser_controls_passed"])
+            self.assertTrue(result["native_default_prompt_parser_passed"])
+            self.assertFalse(result["native_at_mention_registration"])
+            self.assertFalse((home / "arena-runs").exists())
+
+    def test_routing_refuses_missing_origin_metadata_or_inflated_budget(self):
+        with tempfile.TemporaryDirectory(prefix="arena-routing-") as temporary:
+            home = Path(temporary)
+            skill = home / "skills" / "arena"
+            skill.mkdir(parents=True)
+            (skill / "invoke.py").write_text("# Unexecuted verifier fixture\n")
+            block = VERIFY._routing_block(VERIFY.ROUTING_TEMPLATE.read_text())
+            (home / "AGENTS.md").write_text(block)
+            rendered = [{"role": "user", "content": [{"text": "# AGENTS.md instructions\n" + block}]}]
+            valid = {"agents": 5, "mode": "classic", "planned_calls": 25,
+                     "max_calls": 25, "max_attempts": 25,
+                     "requires_approval": False, "approval_source": "direct_command"}
+            for changed in ({"requires_approval": True}, {"approval_source": "worker"},
+                            {"approval_source": None}, {"max_attempts": 26}, {"max_calls": 26}):
+                with self.subTest(changed=changed), mock.patch.object(
+                        VERIFY, "_run_json", return_value=dict(valid, **changed)):
+                    with self.assertRaises(VERIFY.VerificationError):
+                        VERIFY.verify_routing(skill, home, "unused-codex", rendered)
 
 
 if __name__ == "__main__":
