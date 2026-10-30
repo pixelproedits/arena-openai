@@ -13,7 +13,7 @@ or user project edit is part of this audit.
 | Existing paths and symlinks were followed during initialization and output writes | High | `init --dir` accepted an existing directory and wrote `task.md`/`rubric.md`; state writes used a predictable `arena.json.tmp`. An attacker controlling those paths could redirect writes. Hardened I/O requires fresh private run directories, rejects symlinks throughout the path, rejects hardlinks and nonregular files, and uses private atomic output. |
 | Saved state could redirect reads and inject instructions | High | Reproduced acceptance by upstream `validate_state` of an external `agent.solution`, a `r1-m01/../../../outside` match ID, and changed strategy instructions. The hardened validator constrains derived paths, canonical IDs, bracket invariants and original deterministic strategy cards. |
 | Implicit activation and missing per-tournament approval | High | The upstream description allowed activation after an unsatisfactory answer. Its workflow normally ran small tournaments after merely displaying the planned call count. The fork requires a current direct `@arena N` or `$arena N` command and `allow_implicit_invocation: false`. That command authorizes one computed Classic tournament; the trusted orchestrator records its exact guard proposal before live reservations without asking a second approval question. |
-| Actual attempts were not bounded by the planned call count | High | Upstream instructions requested a second attempt for missing outputs and a third judge attempt. These calls were outside the plan. The fork records every actual attempt, including retries and failed startup, before dispatch. The command authorizes the exact computed default attempt budget, with concurrency clamped to available host slots; extra retry allowance needs an explicit user-requested maximum. Task text, workers and automatic fallback cannot increase these limits. Original field sizes and the complete Classic workflow remain available. |
+| Actual attempts were not bounded by the planned call count | High | Upstream instructions requested a second attempt for missing outputs and a third judge attempt. These calls were outside the plan. The fork records every actual job-turn attempt before dispatch, whether a new thread or native follow-up, including retries and failed dispatch. The command authorizes the exact computed default attempt budget, with concurrency clamped to available host slots; extra retry allowance needs an explicit user-requested maximum. Task text, workers and automatic fallback cannot increase these limits. Original field sizes and the complete Classic workflow remain available. |
 | Worker instructions exposed excessive capabilities | High | Upstream prompts allowed reading anything the task pointed to and writing throughout a shared run directory. The fork requires sanitized supplied context and native leaf workers returning text only. Read-only access authorized by the task remains available; workers are instructed to avoid credential access, project changes, external model APIs and nested spawning. The generic native interface does not enforce a separate OS sandbox for each worker; this boundary is instruction-level and is disclosed below. |
 | Task/candidate text could masquerade as control instructions | High | Upstream task delimiters alone did not establish a trust boundary. The fork separates fixed worker security rules from untrusted task/candidate material and forbids material from changing approval, tools, models, dispatch, budgets or file scope. This is defense in depth, not proof that language models resist every injection. |
 | Runtime artifacts inherited the process umask | Medium | Task, state, prompt and answer files were normally opened with ordinary `open(..., "w")`. The fork creates private directories and files independent of permissive umasks and bounds input/output sizes. |
@@ -41,7 +41,7 @@ orchestrator records the matching proposal internally without another approval
 question. This is an auditable approval boundary, not cryptographic proof of
 human origin. The orchestrating Codex instance must check the actual current
 direct user's command and its scope before calling the approval helper. It must apply the worker instructions and
-use one durable reservation per actual launch, including each retry. Local files and skill
+use one durable reservation per job-turn attempt, including follow-ups and each retry. Local files and skill
 instructions cannot constrain an unrelated, malicious process running as the
 same user or prevent an orchestrator from deliberately bypassing the helper.
 
@@ -89,6 +89,33 @@ engine enforces local path/state/output validation and dispatch bookkeeping; it
 cannot technically stop a deliberately noncompliant worker or orchestrator from
 using other host tools. This limitation must not be described as enforced worker
 isolation or a guarantee against every prompt injection.
+
+The upstream `v0.3.2` workflow specifies `N` competitors, generated briefs per job
+and waves bounded by host capacity. It does not require a new native thread for
+every Classic role. Version 0.3.6 removes that fork-specific restriction. Initial
+candidates remain independent; each candidate may continue its own attack and
+defense/revision work through native follow-up, with the complete generated brief
+and a new guard reservation for every turn. Noncompetitor judge threads may be
+reused for explicitly scoped match jobs; candidates and the orchestrator never
+judge. A blind final evaluator has no prior candidate/judging context that could
+reveal answer identity. The job count remains 25 for five competitors and 595
+for 100; spawned-thread counts are reported separately.
+
+Capacity preflight inspects exposed capabilities and reported concurrency, and
+accounts for retained candidate threads, separate judges, other resident workers
+and any known resident/cumulative thread limits. `N` counts competitors, not all
+threads including judges. Idle/completed workers are not assumed to release
+capacity. Outputs are persisted before any genuine close with established
+release behavior; interrupting work or archiving a chat is not closure. A known
+limit or missing required capability that makes the full schedule impossible
+stops the run before model work. The orchestrator does not invent limits or
+require undocumented metadata: if a relevant limit is not exposed, briefly
+disclose uncertainty and proceed with a bounded candidate/judge pool, reported
+concurrency and the guarded attempt budget, stopping on a real capacity error.
+These lifecycle and role-mapping checks are trusted-orchestrator duties, not new
+guard fields or a claim that local Python enforces native thread isolation. No
+field shrink, omitted phase, backend switch or unplanned replacement schedule is
+authorized to evade a host capacity error.
 
 Verification uses synthetic outputs only. No real tournament was launched during
 this audit; live quality, actual model token usage, and worker obedience were not
@@ -153,3 +180,19 @@ temporary dependency directory. The local Codex prompt renderer and App Server
 from implicit context, the loaded routing rule and positive/negative command
 parser controls. This verification started zero model calls and zero tournaments;
 it does not establish successful completion of a live Classic tournament.
+
+Version 0.3.6 source validation: `python3 -m unittest discover -s tests -q`
+completed **101 tests successfully**, including the existing 42 security tests
+and 0.3.6 archive checks. `git diff --check` passed. The engine, guard, parser,
+secure I/O, strategy cards, rubric, explicit-only metadata and generated Classic
+role templates remain unchanged from 0.3.5. Scheduling changes are instructions
+to the native orchestrator, with the existing guard accounting applied to both
+spawned and follow-up job turns; no native scheduler or state schema was added.
+These checks used synthetic local inputs, started no workers or model calls,
+and do not establish the capacity or completion of a live tournament.
+
+Separate 0.3.6 installation checks passed the official Skill Creator validator
+for source and installed files and the real local Codex discovery/policy/routing
+verifier. The discovery verifier started zero model calls and zero tournaments.
+These checks do not claim completion of a live worker-reuse tournament or a
+100-worker concurrency stress test.

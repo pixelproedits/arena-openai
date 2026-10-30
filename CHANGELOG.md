@@ -1,3 +1,10 @@
+# Hardened fork 0.3.6
+
+- Remove the fork's fresh-thread-per-job restriction: independent initial candidates may continue their own Classic attack/defense/revision work through reserved native follow-up turns.
+- Keep separate noncompetitor judges, complete generated briefs and one guard reservation per job attempt; distinguish spawned threads from unchanged 25/595 worker-turn budgets.
+- Require capacity preflight for retained candidates, separate judges, cumulative creation and genuine close/release behavior; stop before model work when the full schedule cannot fit.
+- Preserve the bracket engine, guard/schema, cards, rubric, Classic role templates and explicit-only policy unchanged.
+
 # Hardened fork 0.3.5
 
 - Treat the validated current direct `@arena N` / `$arena N` command as authorization for exactly one computed Classic tournament, without a second approval question.
