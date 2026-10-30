@@ -26,9 +26,7 @@ def read_state(directory):
         return json.load(stream)
 
 def write(path, text):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as stream:
-        stream.write(text)
+    arena.SIO.write_text(os.path.abspath(path), text)
 
 def outputs(phase, jobs):
     for job in jobs:
@@ -54,9 +52,8 @@ def run(root, name, mode, seed, planned_calls):
     directory = os.path.join(root, name)
     if os.path.exists(directory):
         raise RuntimeError("scenario output already exists: %s" % directory)
-    os.makedirs(directory)
     args = ["init", "--agents", "2", "--seed", str(seed), "--max-calls", str(planned_calls),
-            "--task", "Demonstrate a deterministic fixture run without model calls.", "--dir", directory]
+            "--offline-fixture", "--task", "Demonstrate a deterministic fixture run without model calls.", "--dir", directory]
     if mode == "classic":
         args.append("--classic")
     call(*args)
@@ -87,8 +84,9 @@ def run(root, name, mode, seed, planned_calls):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", required=True, help="parent directory for scenario outputs")
-    root = os.path.abspath(parser.parse_args().output_dir)
-    os.makedirs(root, exist_ok=True)
+    root = os.path.realpath(parser.parse_args().output_dir)
+    arena.checked_run_dir(root)
+    arena.SIO.make_dirs(root)
     for scenario in SCENARIOS:
         run(root, *scenario)
 

@@ -1,32 +1,40 @@
 #!/usr/bin/env python3
 """Validate Arena release versions and build the installable skill ZIP."""
 import argparse
+import io
 import json
 import os
+import sys
 import zipfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PAYLOAD = ("SKILL.md", "rubric.md", "bracket.py", "strategies.json", "LICENSE", "CREDITS.md")
+SKILL = os.path.join(REPO, "skills", "arena")
+sys.path.insert(0, SKILL)
+import secure_io as SIO
+
+PAYLOAD = ("SKILL.md", "rubric.md", "bracket.py", "guard.py", "secure_io.py",
+           "strategies.json", "agents/openai.yaml", "LICENSE", "CREDITS.md")
 
 
 def package(tag, output_dir):
-    with open(os.path.join(REPO, "plugin.json"), encoding="utf-8") as stream:
-        version = json.load(stream)["version"]
-    with open(os.path.join(REPO, ".codex-plugin", "plugin.json"), encoding="utf-8") as stream:
-        installed_version = json.load(stream)["version"]
+    version = json.loads(SIO.read_text(os.path.join(REPO, "plugin.json")))["version"]
+    installed_version = json.loads(SIO.read_text(os.path.join(REPO, ".codex-plugin", "plugin.json")))["version"]
     if version != installed_version:
         raise ValueError("plugin.json and .codex-plugin/plugin.json versions differ")
     if tag.removeprefix("v") != version:
         raise ValueError("release tag %r does not match plugin version %r" % (tag, version))
-    os.makedirs(output_dir, exist_ok=True)
+    SIO.make_dirs(output_dir)
     archive = os.path.join(output_dir, "arena-skill-v%s.zip" % version)
-    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as output:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as output:
         for name in PAYLOAD:
-            source_root = REPO if name in ("LICENSE", "CREDITS.md") else os.path.join(REPO, "skills", "arena")
-            source = os.path.join(source_root, name)
-            if not os.path.isfile(source):
-                raise FileNotFoundError("missing skill payload file: %s" % source)
-            output.write(source, os.path.join("arena", name))
+            source = os.path.join(SKILL, name)
+            contents = SIO.read_text(source).encode("utf-8")
+            entry = zipfile.ZipInfo("arena/" + name)
+            entry.external_attr = 0o100600 << 16
+            entry.compress_type = zipfile.ZIP_DEFLATED
+            output.writestr(entry, contents)
+    SIO.write_bytes(archive, buffer.getvalue(), replace=False)
     return archive
 
 

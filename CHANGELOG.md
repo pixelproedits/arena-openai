@@ -1,3 +1,11 @@
+# Hardened fork 0.3.3
+
+- Pin provenance to upstream v0.3.2 / adb206161c5d60d4dc9bbfa8757222744a93e568.
+- Add explicit-only Codex metadata, per-run approval and single-attempt ledger.
+- Harden path/state/permissions and bounded atomic output handling.
+- Add offline adversarial regression tests and local Codex discovery verification.
+- Preserve original native tournaments, field sizes, modes and retry capability; disclose host tool isolation boundaries.
+
 # Changelog
 
 This file records published release notes for the project.
