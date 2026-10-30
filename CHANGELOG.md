@@ -1,3 +1,12 @@
+# Hardened fork 0.3.4
+
+- Make Classic the only tournament mode and default across engine, prompts and fixtures.
+- Remove lean/judge-and-improve and quick-mode paths; refuse old non-Classic state without modifying it.
+- Add explicit `@arena N` / `$arena N` shorthand, deterministic local parsing and a reviewed global routing rule.
+- Calculate the proposed usage ceiling from the candidate count; accept a short direct user approval for that exact proposal.
+- Preserve file/state/permission protections, per-attempt reservations and native worker scope.
+- Verify the installed routing and explicit-only policy offline without an AI turn.
+
 # Hardened fork 0.3.3
 
 - Pin provenance to upstream v0.3.2 / adb206161c5d60d4dc9bbfa8757222744a93e568.

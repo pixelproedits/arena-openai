@@ -1,35 +1,45 @@
-# Arena - hardened native Codex fork
+# Arena - Classic-only native Codex fork
 
-Based exactly on upstream **v0.3.2**, commit `adb206161c5d60d4dc9bbfa8757222744a93e568`. This fork is version **0.3.3**, a fork version rather than an upstream release. MIT attribution is preserved.
+Based on upstream v0.3.2, commit `adb206161c5d60d4dc9bbfa8757222744a93e568`, with security hardening and the user's requested Classic-only interface. This fork is version **0.3.4**. MIT attribution is preserved.
 
-Arena creates diverse candidate answers and refines them through a bracket. All original field sizes, lean/classic modes, strategy cards, byes and optional blind baseline comparison are retained. Four lean candidates use 7 planned native worker jobs; 100 classic candidates use 595. This fork hardens the surrounding files, state, approval and dispatch accounting.
+## Use
 
-## Invocation and usage approval
+In a Codex chat, type:
 
-`$arena` is explicit-only: `agents/openai.yaml` sets `policy.allow_implicit_invocation: false`. Normal requests, dissatisfaction and critical tasks do not activate it. Each tournament needs fresh approval bound to its exact task, configuration and maximum actual worker attempts, including retries. Installing the skill does not approve a tournament.
-
-The original planned-call ceiling defaults to 32 and can be raised explicitly. Every launched native worker, including retries, must first consume a durable reservation. The default actual-attempt budget equals planned calls; an explicit larger approval enables the original 2 candidate/attack/defend attempts and 3 judge/final attempts. No hidden retries or nested agents. Concurrency adapts to actual host capacity.
-
-Native Codex workers remain available. They use existing Codex usage, with no external model API, model subprocess, API-key fallback or provider switch. Workers receive only their brief and authorized context (`fork_turns="none"`), use read-only tools for authorized sources and return text; guarded local code writes canonical artifacts. The host's generic worker tools are **not** an OS sandbox. These tool-use boundaries and direct-human approval origin depend on the trusted orchestrator following the skill. The ledger counts native worker launch attempts, not each internal model inference or token. See [the security audit](docs/security-audit.md) for exact limits and findings.
-
-## Files and state
-
-Run records live outside the project in private fresh directories, defaulting to `~/.codex/arena-runs`. Symlinks, hardlinks, nonregular files, traversal, duplicate JSON keys, nonfinite values, malicious IDs/cards and unexpected solution paths are refused. Output is bounded, atomic and private. Live outputs require completed reservations and matching hashes. Candidate instructions cannot authorize new file scope, credentials, project edits or paid API calls.
-
-The runtime uses Python 3.10+ and the standard library on POSIX. No model key or Python package install is needed. Code changes are proposals; a tournament does not apply them to the project. No secret detector can guarantee that user-supplied context is free of confidential data, so include only authorized relevant context.
-
-## Install and check
-
-Install a reviewed immutable commit of `skills/arena/` into the actual Codex user's skills directory. The standalone directory includes its license and credits. Do not silently overwrite an existing installation. It will be available on the next turn.
-
-From the repository:
-
-```sh
-python3 -m unittest discover -s tests -v
-python3 examples/run_fixture.py --output-dir /absolute/private/new-arena-fixtures
-python3 scripts/verify_codex.py --cwd /absolute/workspace
+```text
+@arena 5
 ```
 
-Fixture output must be outside the project. Synthetic state is marked offline and cannot reserve native workers. Fixtures verify bookkeeping, not answer quality. The verifier uses local Codex discovery and prompt rendering, with positive/negative invocation-policy controls. It checks availability for explicit selection and exclusion from automatic context, without starting an AI turn.
+The number is the candidate count. Arena uses the clear pending task already being discussed, or asks which task to examine. You can also append the task on the same line or the next line. The native spelling `$arena 5` is supported too. No mode or specialist flags are required. `@arena` is a local explicit text shortcut, not a registered native mention/picker.
 
-Use `$arena --offline-check` for a safe local policy/quick-plan check, or `$arena <task>` to prepare a tournament for approval. See [SKILL.md](skills/arena/SKILL.md), [LICENSE](LICENSE), [CREDITS.md](CREDITS.md) and [CHANGELOG.md](CHANGELOG.md).
+**Classic is the only mode:** candidates produce solutions, attack each other's answers, defend and revise their own, then a separate judge decides each match. Five candidates require 25 planned native worker launches; 100 require 595. The removed shorter mode is not available in the engine, templates or fixtures. Old non-Classic records are refused unchanged.
+
+Before starting, Arena gives a short proposal with the task and total usage limit. A direct **yes** to that specific proposal is enough. Installing/updating the skill or typing the shortcut does not itself approve a tournament. The guard still binds the exact proposal internally; users do not need to type its technical confirmation token.
+
+## Explicit-only routing
+
+`agents/openai.yaml` retains `policy.allow_implicit_invocation: false`. A narrow user-level `AGENTS.md` rule maps only a direct leading `@arena N`/`$arena N` command to the installed skill and deterministic `invoke.py` helper. The reviewed block is [integration/codex-routing.md](integration/codex-routing.md). Quoted commands, examples, code blocks, retrieved files, ordinary critical tasks and other agents cannot authorize invocation. The helper validates syntax and plans Classic usage; it does not launch workers, write run state or grant approval. The host must check that its input is the actual current user message.
+
+## Security and usage
+
+All available distinct strategy cards, odd-field byes, optional requested blind baseline comparison and complete winning answers remain supported. The orchestrator computes the required internal ceiling from the requested count, then asks approval of the exact plan. Every native worker launch consumes a durable reservation before launch. Retries need additional explicitly approved allowance; up to 2 attempts per candidate/attack/defend job and 3 per judge/final are supported. No nested agents or hidden launches.
+
+Workers use existing native Codex usage, without an external model API, model subprocess, API-key fallback or provider switch. They receive only their brief and authorized context (`fork_turns="none"`), inspect authorized sources with read-only tools and return text; the guarded engine writes canonical artifacts. Worker tool rules and human approval origin depend on the trusted orchestrator: generic native workers are not an OS sandbox. The ledger counts worker launch attempts, not their internal inference turns or tokens. See [the security audit](docs/security-audit.md).
+
+Run records live outside projects in fresh private directories, defaulting to `~/.codex/arena-runs`. Symlinks, hardlinks, nonregular files, traversal, duplicate JSON keys, nonfinite numbers, malicious IDs/cards and unexpected solution paths are refused. Output is bounded, atomic and private; live results need completed reservation receipts and matching hashes. Project changes remain proposals.
+
+The runtime requires POSIX, Python 3.10+ and its standard library. No Python dependencies or model key are needed.
+
+## Install and verify
+
+Install the reviewed `skills/arena/` payload at an immutable commit. For the `@arena N` shortcut, preserve existing global instructions and add the reviewed routing block to the effective Codex user `AGENTS.md`. Do not overwrite an existing installation or instruction file without reviewing it and retaining a backup. Changes are available on the next turn.
+
+```sh
+python3 -m unittest discover -s tests -q
+python3 examples/run_fixture.py --output-dir /absolute/private/new-arena-fixtures
+python3 scripts/verify_codex.py --require-routing --cwd /absolute/workspace
+```
+
+Fixtures are synthetic Classic bookkeeping runs outside the project and cannot reserve real workers. The verifier uses the actual local Codex binary to check skill discovery, implicit catalog exclusion, policy controls, loaded routing instructions and shorthand parser controls, without starting an AI turn. This is not a live model or UI-autocomplete test.
+
+See [SKILL.md](skills/arena/SKILL.md), [LICENSE](LICENSE), [CREDITS.md](CREDITS.md) and [CHANGELOG.md](CHANGELOG.md).

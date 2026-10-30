@@ -1,6 +1,6 @@
 {
   "name": "arena-openai",
-  "version": "0.3.3",
-  "description": "Explicit-only native Codex answer tournaments with secure state and per-run usage approval.",
+  "version": "0.3.4",
+  "description": "Classic-only native Codex tournaments with short explicit invocation and secure usage approval.",
   "skills": "./skills/"
 }

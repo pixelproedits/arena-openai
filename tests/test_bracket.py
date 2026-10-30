@@ -85,9 +85,9 @@ class SimulatedTournament(TempDir):
             self.assertEqual(len(in_round), len(set(in_round)))
             for m in rd["matches"]:
                 self.ok("record", m["id"], rng.choice([m["a"], m["b"]]), "--reason", "simulated", "--dir", d)
-                synthesized = B.synthesized_out(d, rd["n"], m["id"])
-                os.makedirs(os.path.dirname(synthesized), mode=0o700, exist_ok=True)
-                write(synthesized, "simulated synthesis")
+                revised = B.revised_out(d, rd["n"], m["id"], m["a"])
+                os.makedirs(os.path.dirname(revised), mode=0o700, exist_ok=True)
+                write(revised, "simulated revised answer")
             self.ok("advance", "--dir", d)
         alive_at_start.append(1)
         return d, load(d), alive_at_start
@@ -146,9 +146,9 @@ class SimulatedTournament(TempDir):
                     sizes.append(len(rd["alive"]))
                     for m in rd["matches"]:
                         B.record(st, m["id"], rng.choice([m["a"], m["b"]]))
-                        synthesized = B.synthesized_out(st["dir"], rd["n"], m["id"])
-                        os.makedirs(os.path.dirname(synthesized), mode=0o700, exist_ok=True)
-                        write(synthesized, "simulated synthesis")
+                        revised = B.revised_out(st["dir"], rd["n"], m["id"], m["a"])
+                        os.makedirs(os.path.dirname(revised), mode=0o700, exist_ok=True)
+                        write(revised, "simulated revised answer")
                     B.advance(st)
                 self.assertEqual(sizes + [1], B.bracket_sizes(n))
                 self.assertEqual(len(B.alive_ids(st)), 1)
@@ -212,28 +212,29 @@ class Dealer(unittest.TestCase):
 
 
 class Plan(unittest.TestCase):
-    def test_numbers(self):
+    def test_classic_default_call_counts(self):
         self.assertEqual(B.bracket_sizes(100), [100, 50, 25, 13, 7, 4, 2, 1])
-        t = B.plan_totals(100, wave=4)
-        self.assertEqual((t["rounds"], t["calls"], t["waves"]), (7, 199, 53))
-        t = B.plan_totals(16, wave=4)
-        self.assertEqual((t["rounds"], t["calls"], t["waves"]), (4, 31, 9))
+        for n, calls in ((2, 7), (4, 19), (5, 25), (16, 91), (100, 595)):
+            with self.subTest(agents=n):
+                self.assertEqual(B.plan_totals(n)["calls"], calls)
         classic = B.plan_totals(100, wave=4, mode="classic")
         self.assertEqual((classic["rounds"], classic["calls"], classic["waves"]), (7, 595, 155))
 
-    def test_lean_collapses_each_match_to_one_expert_job(self):
+    def test_classic_default_keeps_attack_defend_and_judge_jobs(self):
         data = B.load_strategies()
-        lean = B.new_state(4, 1, data, "/tmp/lean", mode="lean")
-        self.assertEqual(B.phase_jobs(lean, "attack"), [])
-        self.assertEqual(B.phase_jobs(lean, "defend"), [])
-        judges = B.phase_jobs(lean, "judge")
+        state = B.new_state(4, 1, data, "/synthetic/classic")
+        self.assertEqual(state["mode"], "classic")
+        self.assertEqual(len(B.phase_jobs(state, "attack")), 4)
+        self.assertEqual(len(B.phase_jobs(state, "defend")), 4)
+        judges = B.phase_jobs(state, "judge")
         self.assertEqual(len(judges), 2)
-        self.assertTrue(all(j["kind"] == "leanjudge" and len(j["outputs"]) == 2 for j in judges))
+        self.assertTrue(all(j["kind"] == "judge" and len(j["outputs"]) == 1 for j in judges))
 
-        classic = B.new_state(4, 1, data, "/tmp/classic", mode="classic")
-        self.assertEqual(len(B.phase_jobs(classic, "attack")), 4)
-        self.assertEqual(len(B.phase_jobs(classic, "defend")), 4)
-        self.assertTrue(all(j["kind"] == "judge" for j in B.phase_jobs(classic, "judge")))
+    def test_nonclassic_mode_is_rejected_by_python_api(self):
+        with self.assertRaises(B.ArenaError):
+            B.plan_totals(4, mode="lean")
+        with self.assertRaises(B.ArenaError):
+            B.new_state(4, 1, B.load_strategies(), "/synthetic/removed-mode", mode="lean")
 
 
 class Verdicts(unittest.TestCase):
@@ -319,8 +320,6 @@ class FullPipelineWithFakeAgents(TempDir):
                 v = {"match": j["match"], "scores": {a: s(), b: s()}, "winner": a, "reason": "fake",
                      "survived": ["too short"], "standing": {a: [], b: []}}
                 write(j["outputs"][0], json.dumps(v))
-                if len(j["outputs"]) > 1:
-                    write(j["outputs"][1], "Salt on the long wind, improved in match.")
             elif phase == "final":
                 v = {"scores": {"X": {k: 8 for k, _ in B.WEIGHTS}, "Y": {k: 4 for k, _ in B.WEIGHTS}},
                      "winner": "X", "reason": "fake", "fixed": ["salt"]}
@@ -369,12 +368,15 @@ class FullPipelineWithFakeAgents(TempDir):
             self.ok("check", phase, "--dir", d)
         self.assertEqual(seen[-1], "done")
         self.assertIn("spawn", seen)
+        self.assertIn("attack", seen)
+        self.assertIn("defend", seen)
+        self.assertIn("judge", seen)
         self.assertIn("final", seen)
         self.assertEqual(seen.count("advance"), 3, "5 agents take 3 rounds")
         state = load(d)
         champ = state["agents"][state["champion"]]
         self.assertIn(".solution.md", champ["solution"], "the champion carries its revised solution")
-        self.assertIn("improved in match", read(champ["solution"]))
+        self.assertIn("revised by", read(champ["solution"]))
         pair = {read(os.path.join(d, "final", "X.md")).strip(), read(os.path.join(d, "final", "Y.md")).strip()}
         self.assertIn("The sea is big.", pair)
         rep = json.loads(self.ok("winner", "--json", "--dir", d))
@@ -384,7 +386,7 @@ class FullPipelineWithFakeAgents(TempDir):
 
     def test_spawn_briefs_share_one_task_and_differ_in_card(self):
         d = os.path.join(self.tmp, "run2")
-        self.ok("init", "--quick", "--seed", 4, "--task", self.TASK, "--dir", d)
+        self.ok("init", "--agents", 2, "--seed", 4, "--task", self.TASK, "--dir", d)
         self.ok("prompts", "spawn", "--dir", d)
         blocks, cards = set(), set()
         for name in sorted(os.listdir(os.path.join(d, "prompts", "r0"))):
@@ -425,24 +427,16 @@ class FullPipelineWithFakeAgents(TempDir):
         self.assertEqual(read(path + ".unreadable"), bad)
         self.assertEqual(read(path + ".unreadable.1"), bad)
 
-    def test_lean_collect_and_advance_require_synthesized_output(self):
-        d = os.path.join(self.tmp, "lean-missing-synth")
-        self.ok("init", "--agents", 2, "--seed", 1, "--task", "t", "--dir", d)
-        state = load(d)
-        m = state["rounds"][0]["matches"][0]
-        path = B.verdict_out(d, 1, m["id"])
-        os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-        verdict = {"match": m["id"], "winner": m["a"], "scores": {}}
-        write(path, json.dumps(verdict))
-        result = cli("collect", "--dir", d)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("synthesized solution is missing", result.stdout)
-        self.assertIsNone(load(d)["rounds"][0]["matches"][0]["winner"])
-        B.record(state, m["id"], m["a"])
-        before = copy.deepcopy(state)
-        with self.assertRaisesRegex(B.ArenaError, "synthesized solution"):
-            B.advance(state)
-        self.assertEqual(state, before)
+    def test_classic_next_requires_attack_and_defense_before_judge(self):
+        d = os.path.join(self.tmp, "classic-phase-order")
+        self.ok("init", "--agents", 2, "--task", "Synthetic phase check", "--dir", d)
+        for phase in ("spawn", "attack", "defend", "judge"):
+            state = load(d)
+            self.assertEqual(B.next_action(state)[0], phase)
+            self.ok("prompts", phase, "--dir", d)
+            jobs = B.phase_jobs(state, phase)
+            self.fake_outputs(state, phase, jobs, random.Random(7))
+        self.assertEqual(B.next_action(load(d))[0], "collect")
 
 
 class Guards(TempDir):
@@ -521,26 +515,28 @@ class Guards(TempDir):
         self.assertEqual(cli("init", "--quick", "--agents", 8, "--task", "t", "--dir", d + "4").returncode, 2)
         self.assertEqual(cli("init", "--agents", 4, "--task", "   ", "--dir", d + "5").returncode, 2)
 
-    def test_quick_is_2_and_default_is_4(self):
-        d = os.path.join(self.tmp, "quick")
-        self.ok("init", "--quick", "--task", "t", "--dir", d)
+    def test_explicit_two_and_default_four_are_both_classic(self):
+        d = os.path.join(self.tmp, "two")
+        self.ok("init", "--agents", 2, "--task", "t", "--dir", d)
         self.assertEqual(load(d)["agents_n"], 2)
         default_dir = os.path.join(self.tmp, "default")
         self.ok("init", "--task", "t", "--dir", default_dir)
         self.assertEqual(load(default_dir)["agents_n"], 4)
+        self.assertEqual(load(default_dir)["mode"], "classic")
+        self.assertEqual(load(d)["mode"], "classic")
 
     def test_call_budget_blocks_expensive_runs(self):
         baseline = os.path.join(self.tmp, "baseline.md")
         write(baseline, "Earlier answer.")
         eight = os.path.join(self.tmp, "eight-with-final")
-        self.ok("init", "--agents", 8, "--baseline-file", baseline,
+        self.ok("init", "--agents", 8, "--max-calls", 44, "--baseline-file", baseline,
                 "--task", "t", "--dir", eight)
         blocked = os.path.join(self.tmp, "blocked")
         result = cli("init", "--agents", 17, "--task", "t", "--dir", blocked)
         self.assertEqual(result.returncode, 2)
         self.assertIn("above the 32-call limit", result.stderr)
         allowed = os.path.join(self.tmp, "allowed")
-        self.ok("init", "--agents", 16, "--task", "t", "--dir", allowed)
+        self.ok("init", "--agents", 16, "--max-calls", 91, "--task", "t", "--dir", allowed)
         self.assertEqual(load(allowed)["agents_n"], 16)
 
     def test_record_rejects_an_outsider(self):

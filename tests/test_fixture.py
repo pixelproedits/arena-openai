@@ -10,7 +10,7 @@ class FixtureSmoke(unittest.TestCase):
             result = subprocess.run([sys.executable, FIXTURE, "--output-dir", output],
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            for name, mode, calls in (("lean-quick", "lean", 3), ("classic-two", "classic", 7)):
+            for name, mode, calls in (("classic-two", "classic", 7), ("classic-five", "classic", 25)):
                 directory = os.path.join(output, name)
                 with open(os.path.join(directory, "arena.json"), encoding="utf-8") as stream:
                     state = json.load(stream)

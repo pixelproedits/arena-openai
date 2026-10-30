@@ -1,18 +1,17 @@
-# Deterministic fixture demo
+# Deterministic Classic fixtures
 
-Run the fixture harness from the repository root with a new or empty output directory:
-
-```text
-python examples/run_fixture.py --output-dir <temporary-directory>
-```
-
-Observed output:
+Run the fixture harness with a new private directory outside the project:
 
 ```text
-lean-quick: complete champion=a002 synthetic_planned_calls=3
-classic-two: complete champion=a001 synthetic_planned_calls=7
+python3 examples/run_fixture.py --output-dir /absolute/private/new-fixtures
 ```
 
-The harness creates `lean-quick/` and `classic-two/` under the output directory. Each includes `arena.json` and `winner.txt`; the latter identifies the champion and includes its synthetic solution. Both outputs mark their planned-call values as synthetic, not API usage.
+| Scenario | Candidates | Synthetic planned calls |
+| --- | ---: | ---: |
+| `classic-two` | 2 | 7 |
+| `classic-five` | 5 | 25 |
 
-These runs use deterministic fixture solutions and verdicts. They exercise the local bracket bookkeeping only: they make no model or agent calls and do not evaluate answer quality or demonstrate independent live agents.
+Each scenario exercises draft, attack, defense and judge phases through the final
+winner, using deterministic synthetic text. Its private folder includes
+`arena.json` and `winner.txt`. These are offline bookkeeping checks: no model or
+agent call occurs, and no answer-quality or independent-agent claim is made.

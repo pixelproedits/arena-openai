@@ -12,7 +12,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKILL = os.path.join(REPO, "skills", "arena")
 sys.path.insert(0, SKILL)
 import bracket as arena  # noqa: E402
-SCENARIOS = (("lean-quick", "lean", 7, 3), ("classic-two", "classic", 11, 7))
+SCENARIOS = (("classic-two", 2, 11, 7), ("classic-five", 5, 7, 25))
 
 def call(*args):
     result = subprocess.run([sys.executable, os.path.join(SKILL, "bracket.py")] + list(args),
@@ -43,19 +43,16 @@ def outputs(phase, jobs):
             verdict = {"match": job["match"], "scores": {a: score(8), b: score(7)},
                        "winner": a, "reason": "Deterministic synthetic fixture verdict."}
             write(job["outputs"][0], json.dumps(verdict, indent=2) + "\n")
-            if len(job["outputs"]) > 1:
-                write(job["outputs"][1], "Synthetic fixture champion solution for %s.\n" % a)
         else:
             raise RuntimeError("unexpected phase: %s" % phase)
 
-def run(root, name, mode, seed, planned_calls):
+def run(root, name, agents, seed, planned_calls):
+    mode = "classic"
     directory = os.path.join(root, name)
     if os.path.exists(directory):
         raise RuntimeError("scenario output already exists: %s" % directory)
-    args = ["init", "--agents", "2", "--seed", str(seed), "--max-calls", str(planned_calls),
+    args = ["init", "--agents", str(agents), "--seed", str(seed), "--max-calls", str(planned_calls),
             "--offline-fixture", "--task", "Demonstrate a deterministic fixture run without model calls.", "--dir", directory]
-    if mode == "classic":
-        args.append("--classic")
     call(*args)
     for _ in range(100):
         state = read_state(directory)

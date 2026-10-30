@@ -12,7 +12,7 @@ SKILL = os.path.join(REPO, "skills", "arena")
 sys.path.insert(0, SKILL)
 import secure_io as SIO
 
-PAYLOAD = ("SKILL.md", "rubric.md", "bracket.py", "guard.py", "secure_io.py",
+PAYLOAD = ("SKILL.md", "rubric.md", "bracket.py", "guard.py", "secure_io.py", "invoke.py",
            "strategies.json", "agents/openai.yaml", "LICENSE", "CREDITS.md")
 
 

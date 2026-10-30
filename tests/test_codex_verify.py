@@ -52,6 +52,23 @@ class CodexVerification(unittest.TestCase):
         self.assertNotIn("sensitive", str(error.exception))
         self.assertNotIn("credential", str(error.exception))
 
+    def test_manual_routing_path_is_not_an_implicit_catalog_entry(self):
+        prompt = [{"role": "developer", "content": [{
+            "text": "Use /installed/arena/SKILL.md only after a direct @arena command."}]}]
+        self.assertFalse(VERIFY._catalog_has(prompt, "arena", Path("/installed/arena/SKILL.md")))
+
+    def test_routing_requires_an_injected_agents_instruction_item(self):
+        block = VERIFY._routing_block(VERIFY.ROUTING_TEMPLATE.read_text())
+        self.assertFalse(VERIFY._routing_loaded([
+            {"role": "user", "content": [{"text": block}]}], block))
+        self.assertTrue(VERIFY._routing_loaded([
+            {"role": "user", "content": [{"text": "# AGENTS.md instructions\n" + block}]}], block))
+
+    def test_duplicate_routing_blocks_are_rejected(self):
+        block = VERIFY._routing_block(VERIFY.ROUTING_TEMPLATE.read_text())
+        with self.assertRaises(VERIFY.VerificationError):
+            VERIFY._routing_block(block + "\n" + block)
+
 
 if __name__ == "__main__":
     unittest.main()

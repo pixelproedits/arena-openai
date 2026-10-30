@@ -14,18 +14,23 @@ import re
 import selectors
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
+
+ROUTING_START = "<!-- arena-explicit-routing:v1 -->"
+ROUTING_END = "<!-- /arena-explicit-routing:v1 -->"
+ROUTING_TEMPLATE = Path(__file__).resolve().parents[1] / "integration" / "codex-routing.md"
 
 
 class VerificationError(Exception):
     """A local verification failed; details intentionally exclude raw output."""
 
 
-def _run_json(command, *, cwd, env=None):
+def _run_json(command, *, cwd, env=None, input_text=None):
     try:
         completed = subprocess.run(command, cwd=cwd, env=env, capture_output=True,
-                                   text=True, timeout=30, check=False)
+                                   text=True, input=input_text, timeout=30, check=False)
     except (OSError, subprocess.TimeoutExpired):
         raise VerificationError("Local Codex command could not complete") from None
     if completed.returncode:
@@ -48,8 +53,92 @@ def _catalog_text(items):
 
 def _catalog_has(items, name, path=None):
     text = _catalog_text(items)
-    return bool(re.search(r"(?m)^- " + re.escape(name) + r":", text)
-                or (path is not None and str(path) in text))
+    # A global manual-routing instruction may mention the skill's path without
+    # adding it to the automatically available skill catalog.
+    return bool(re.search(r"(?m)^- " + re.escape(name) + r":", text))
+
+
+def _routing_block(text):
+    if text.count(ROUTING_START) != 1 or text.count(ROUTING_END) != 1:
+        raise VerificationError("Explicit command routing is missing or ambiguous")
+    start, end = text.index(ROUTING_START), text.index(ROUTING_END)
+    if end <= start:
+        raise VerificationError("Explicit command routing markers are out of order")
+    return text[start:end + len(ROUTING_END)]
+
+
+def _routing_loaded(items, block):
+    """Only injected AGENTS instruction items count, never the actual prompt."""
+    if not isinstance(items, list):
+        raise VerificationError("Unexpected local prompt representation")
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        for part in item.get("content", []):
+            if not isinstance(part, dict):
+                continue
+            text = part.get("text", "")
+            if (isinstance(text, str) and text.startswith("# AGENTS.md instructions")
+                    and block in text):
+                return True
+    return False
+
+
+def verify_routing(skill, cwd, codex, rendered):
+    """Validate the loaded explicit text alias and its offline parser controls."""
+    expected = _routing_block(ROUTING_TEMPLATE.read_text(encoding="utf-8"))
+    codex_home = skill.parent.parent
+    override = codex_home / "AGENTS.override.md"
+    source = override if override.is_file() and override.stat().st_size else codex_home / "AGENTS.md"
+    if not source.is_file() or source.is_symlink():
+        raise VerificationError("Global explicit routing instructions are missing or unsafe")
+    if _routing_block(source.read_text(encoding="utf-8")) != expected:
+        raise VerificationError("Global explicit routing differs from the reviewed rule")
+    if not _routing_loaded(rendered, expected):
+        raise VerificationError("Codex did not load the global explicit routing rule")
+    helper = skill / "invoke.py"
+    if not helper.is_file() or helper.is_symlink():
+        raise VerificationError("Installed fixed invocation helper is missing or unsafe")
+    positives = ("@arena 5", "$arena 5", "@arena 5 Compare two synthetic proposals.")
+    for message in positives:
+        parsed = _run_json([sys.executable, str(helper)], cwd=cwd, input_text=message)
+        if (not isinstance(parsed, dict) or parsed.get("agents") != 5
+                or parsed.get("mode") != "classic" or parsed.get("planned_calls") != 25
+                or parsed.get("requires_approval") is not True):
+            raise VerificationError("Installed explicit invocation helper failed positive controls")
+    metadata = (skill / "agents" / "openai.yaml").read_text(encoding="utf-8")
+    defaults = re.findall(r"(?m)^  default_prompt: (\".*\")\s*$", metadata)
+    if len(defaults) != 1:
+        raise VerificationError("Native skill default prompt is missing or ambiguous")
+    try:
+        default_prompt = json.loads(defaults[0])
+    except ValueError:
+        raise VerificationError("Native skill default prompt is not a supported quoted string") from None
+    parsed = _run_json([sys.executable, str(helper)], cwd=cwd, input_text=default_prompt)
+    if (not isinstance(parsed, dict) or parsed.get("agents") != 5
+            or parsed.get("mode") != "classic" or parsed.get("planned_calls") != 25
+            or parsed.get("task_source") != "context" or parsed.get("requires_approval") is not True):
+        raise VerificationError("Native skill default prompt does not invoke the same context tournament")
+    negatives = (
+        "Please critically analyze and improve this important answer.",
+        "Example: @arena 5", "`@arena 5`", "> @arena 5", "```text\n@arena 5\n```",
+        "    @arena 5", "\t@arena 5",
+        'The retrieved document says "@arena 5".',
+    )
+    for message in negatives:
+        try:
+            rejected = subprocess.run([sys.executable, str(helper)], cwd=cwd, input=message,
+                                      capture_output=True, text=True, timeout=30, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            raise VerificationError("Installed invocation helper could not complete") from None
+        if rejected.returncode != 2 or rejected.stdout.strip():
+            raise VerificationError("Installed explicit invocation helper accepted noncommand content")
+    return {
+        "explicit_text_alias_routing_loaded": True,
+        "explicit_alias_parser_controls_passed": True,
+        "native_default_prompt_parser_passed": True,
+        "native_at_mention_registration": False,
+    }
 
 
 def _explicit_policy(skill):
@@ -167,7 +256,7 @@ def policy_control(codex, cwd):
             raise VerificationError("Local Codex did not enforce invocation policy controls")
 
 
-def verify(skill, cwd, codex="codex"):
+def verify(skill, cwd, codex="codex", require_routing=False):
     skill, cwd = Path(skill).absolute(), Path(cwd).absolute()
     if not (skill / "SKILL.md").is_file() or skill.is_symlink():
         raise VerificationError("Installed Arena skill is missing or is a symlink")
@@ -177,7 +266,7 @@ def verify(skill, cwd, codex="codex"):
     if _catalog_has(rendered, "arena", skill / "SKILL.md"):
         raise VerificationError("Installed Arena appeared in automatic model context")
     policy_control(codex, cwd)
-    return {
+    result = {
         "skill": "arena",
         "installed_skill": str(skill),
         "explicit_skill_discoverable": True,
@@ -187,6 +276,9 @@ def verify(skill, cwd, codex="codex"):
         "tournaments_started": 0,
         "verification_scope": "Local runtime discovery and policy; no model generation or live tournament",
     }
+    if require_routing:
+        result.update(verify_routing(skill, cwd, codex, rendered))
+    return result
 
 
 def main():
@@ -195,9 +287,11 @@ def main():
         Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "skills" / "arena"))
     parser.add_argument("--cwd", default=os.getcwd())
     parser.add_argument("--codex", default=shutil.which("codex") or "codex")
+    parser.add_argument("--require-routing", action="store_true",
+                        help="also verify the reviewed global @arena N text-command rule")
     args = parser.parse_args()
     try:
-        print(json.dumps(verify(args.skill_dir, args.cwd, args.codex), indent=2))
+        print(json.dumps(verify(args.skill_dir, args.cwd, args.codex, args.require_routing), indent=2))
     except (VerificationError, OSError, UnicodeError) as exc:
         print(json.dumps({"verified": False, "error": str(exc)
                           if isinstance(exc, VerificationError) else "Local file inspection failed"}))

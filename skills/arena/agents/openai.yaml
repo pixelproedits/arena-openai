@@ -1,6 +1,6 @@
 interface:
   display_name: "Arena"
-  short_description: "Explicit-only native tournaments with usage approval"
-  default_prompt: "Use $arena to plan an answer tournament and request approval of its actual usage budget."
+  short_description: "Classic-only tournaments; use @arena N"
+  default_prompt: "$arena 5"
 policy:
   allow_implicit_invocation: false

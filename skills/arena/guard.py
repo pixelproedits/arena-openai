@@ -26,8 +26,10 @@ def _json(value):
 
 
 def definition(state, max_attempts=None):
+    if state.get("mode", "classic") != "classic":
+        raise B.ArenaError("only Classic tournament approval is supported")
     n, wave = state["agents_n"], state["wave"]
-    calls = B.plan_totals(n, wave, state.get("mode", "classic"))["calls"] + int(state["has_baseline"])
+    calls = B.plan_totals(n, wave)["calls"] + int(state["has_baseline"])
     if max_attempts is None:
         max_attempts = calls
     if (not 1 <= n <= MAX_AGENTS or not 1 <= wave <= MAX_WAVE
@@ -36,10 +38,10 @@ def definition(state, max_attempts=None):
     files = {}
     for name in ("task.md", "rubric.md") + (("baseline.md",) if state["has_baseline"] else ()):
         files[name] = hashlib.sha256(IO.read_text(os.path.join(state["dir"], name)).encode()).hexdigest()
-    for name in ("SKILL.md", "bracket.py", "guard.py", "secure_io.py", "strategies.json", "agents/openai.yaml"):
+    for name in ("SKILL.md", "bracket.py", "guard.py", "invoke.py", "secure_io.py", "strategies.json", "agents/openai.yaml"):
         files["skill/" + name] = hashlib.sha256(IO.read_text(os.path.join(B.HERE, name)).encode()).hexdigest()
     return {"run": state["dir"], "seed": state["seed"], "agents": n,
-            "mode": state.get("mode", "classic"), "wave": wave, "calls": calls,
+            "mode": "classic", "wave": wave, "calls": calls,
             "max_calls": state.get("max_calls", 32), "max_attempts": max_attempts,
             "attempts_per_candidate": 2, "attempts_per_judge": 3,
             "external_api": False, "project_writes": False, "files": files}
