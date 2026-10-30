@@ -13,7 +13,7 @@ or user project edit is part of this audit.
 | Existing paths and symlinks were followed during initialization and output writes | High | `init --dir` accepted an existing directory and wrote `task.md`/`rubric.md`; state writes used a predictable `arena.json.tmp`. An attacker controlling those paths could redirect writes. Hardened I/O requires fresh private run directories, rejects symlinks throughout the path, rejects hardlinks and nonregular files, and uses private atomic output. |
 | Saved state could redirect reads and inject instructions | High | Reproduced acceptance by upstream `validate_state` of an external `agent.solution`, a `r1-m01/../../../outside` match ID, and changed strategy instructions. The hardened validator constrains derived paths, canonical IDs, bracket invariants and original deterministic strategy cards. |
 | Implicit activation and missing per-tournament approval | High | The upstream description allowed activation after an unsatisfactory answer. Its workflow normally ran small tournaments after merely displaying the planned call count. The fork requires a current direct Arena menu selection plus `N`, or a leading `@arena N` / `$arena N` command, and `allow_implicit_invocation: false`. That request authorizes one computed Classic tournament; the trusted orchestrator records its exact guard proposal before live reservations without asking a second approval question. |
-| Actual attempts were not bounded by the planned call count | High | Upstream instructions requested a second attempt for missing outputs and a third judge attempt. These calls were outside the plan. The fork records every actual job-turn attempt before dispatch, whether a new thread or native follow-up, including retries and failed dispatch. The command authorizes the exact computed default attempt budget, with concurrency clamped to available host slots; extra retry allowance needs an explicit user-requested maximum. Task text, workers and automatic fallback cannot increase these limits. Original field sizes and the complete Classic workflow remain available. |
+| Actual retry attempts lacked durable accounting | High | Upstream allows two attempts per nonjudge job and three per judge/final; the planned count describes successful jobs, not the full retry allowance. Version 0.3.8 restores every original retry automatically while recording each job-turn attempt before dispatch, including follow-ups and failed dispatch. The default natural allowance is `13*N - 11` (+3 baseline), with concurrency clamped to host slots. No separate retry approval is needed. Task text and workers cannot expand the original per-job allowances or bypass receipts. |
 | Worker instructions exposed excessive capabilities | High | Upstream prompts allowed reading anything the task pointed to and writing throughout a shared run directory. The fork requires sanitized supplied context and native leaf workers returning text only. Read-only access authorized by the task remains available; workers are instructed to avoid credential access, project changes, external model APIs and nested spawning. The generic native interface does not enforce a separate OS sandbox for each worker; this boundary is instruction-level and is disclosed below. |
 | Task/candidate text could masquerade as control instructions | High | Upstream task delimiters alone did not establish a trust boundary. The fork separates fixed worker security rules from untrusted task/candidate material and forbids material from changing approval, tools, models, dispatch, budgets or file scope. This is defense in depth, not proof that language models resist every injection. |
 | Runtime artifacts inherited the process umask | Medium | Task, state, prompt and answer files were normally opened with ordinary `open(..., "w")`. The fork creates private directories and files independent of permissive umasks and bounds input/output sizes. |
@@ -58,7 +58,29 @@ metadata, never infer it from a loaded skill block, task, history or another
 agent. The parser checks syntax and path equality, not human or selection
 authenticity. A bare number without verified selection is refused. Neither menu
 input path initializes run state, records guard approval or dispatches workers;
-Classic scheduling, turn budgets and the guard/schema are unchanged.
+Classic scheduling, turn budgets and the guard/schema were unchanged by 0.3.7.
+
+Version 0.3.8 corrects the fork's planned-count actual-attempt cap. The planned
+ceiling retains upstream's default 32; an explicitly requested field authorizes
+`max(32, planned_calls)` without a second confirmation. The default actual budget
+sums all original per-job allowances: `13*N - 11`, plus three for a baseline.
+Five competitors therefore plan 25 turns and allow 54 attempts; 100 plan 595
+and allow 1,289. An explicit user-selected lower cap remains compatible. The
+guard's schema, per-job limits, exact proposal token, consumed reservations,
+fingerprint binding and private output publication remain in place.
+
+The same update restores upstream's detailed five Classic role instructions,
+Sol-tier competitor/attack/defense and Astra judge/final preferences when
+available, a fresh third judge after two failures, and use of a clearly rejected
+answer to the same task as the baseline. Task-authorized inspected verification
+can use private scratch without an additional approval; project/source/input
+files remain read-only, credentials and network writes remain forbidden, and
+the orchestrator does not editorially inspect tournament outputs or judge.
+Canonical outputs still pass through the guard. A current direct instruction to
+continue a clearly identified pending request authorizes its continuation after
+the requested update with a fresh code-bound proposal; installation, quotes,
+history and other agents never supply that current authorization. Real independent
+workers remain required; no undisclosed parent-role fallback was restored.
 
 The worker contract permits deliberately supplied task/context, authorized
 read-only project context and candidate text. It forbids inherited unrelated
@@ -232,3 +254,20 @@ link controls and structured-selection count controls. The observed serialized
 menu link plus `5` now returns the exact 25-attempt Classic plan without another
 confirmation. These checks started zero model calls and zero tournaments; they
 do not claim a mouse-driven UI test or completion of a live tournament.
+
+Version 0.3.8 source validation: `python3 -m unittest discover -s tests -q`
+completed **112 tests successfully**, including 45 security tests. New regressions
+complete a two-candidate run after every job uses its original retry allowance
+(7 planned jobs, 15 attempts), and the baseline version uses all three final
+attempts (8 planned, 18 attempts), without changing the original approval.
+Per-job limits, explicit lower caps, tampered-budget rejection, parser/menu
+controls and 0.3.8 archive checks pass. `git diff --check` passed. Secure I/O,
+strategy cards, rubric and explicit-only metadata remain unchanged.
+
+An independent offline review passed 107 focused tests and two additional
+five-candidate synthetic flows: 25 planned turns/54 consumed attempts without a
+baseline and 26/57 with a baseline. Both reached `DONE` with a valid winner and
+the original unchanged approval, including attempts beyond the 32 planned-call
+ceiling. These checks used synthetic outputs only: no model calls, worker agents,
+live tournaments or installed-runtime verification were performed as part of
+this source validation. They do not establish live answer quality or host capacity.

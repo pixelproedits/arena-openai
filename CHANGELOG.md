@@ -1,3 +1,11 @@
+# Hardened fork 0.3.8
+
+- Restore the original 32 planned-call default and automatic computed ceiling for an explicitly requested field.
+- Include every original retry by default: two attempts per nonjudge job and three per judge/final, totaling `13*N - 11` (+3 baseline). Five competitors plan 25 turns and allow 54 attempts; 100 plan 595 and allow 1,289.
+- Restore detailed upstream Classic role instructions, Sol/Astra model preferences, a fresh third judge, rejected-task baseline behavior and inspected task-authorized private scratch checks.
+- Preserve explicit menu routing, direct continuation of a pending request, no second confirmation, guarded receipts/code hashes, private I/O and no project/credential/network mutations.
+- Add offline end-to-end regressions completing after retries beyond the planned count, including the optional final comparison.
+
 # Hardened fork 0.3.7
 
 - Support selecting Arena from the native `$` menu and typing `N`, including the exact serialized leading skill link and separately verified current selection metadata.

@@ -111,7 +111,9 @@ def verify_routing(skill, cwd, codex, rendered):
         parsed = _run_json([sys.executable, str(helper)] + arguments, cwd=cwd, input_text=message)
         if (not isinstance(parsed, dict) or parsed.get("agents") != agents
                 or parsed.get("mode") != "classic" or parsed.get("planned_calls") != calls
-                or parsed.get("max_calls") != calls or parsed.get("max_attempts") != calls
+                or parsed.get("max_calls") != max(32, calls)
+                or parsed.get("max_attempts") != 13 * agents - 11
+                or parsed.get("retry_allowance") != 13 * agents - 11 - calls
                 or parsed.get("requires_approval") is not False
                 or parsed.get("approval_source") != "direct_command"):
             raise VerificationError("Installed explicit invocation helper failed positive controls")
@@ -126,7 +128,8 @@ def verify_routing(skill, cwd, codex, rendered):
     parsed = _run_json([sys.executable, str(helper)], cwd=cwd, input_text=default_prompt)
     if (not isinstance(parsed, dict) or parsed.get("agents") != 5
             or parsed.get("mode") != "classic" or parsed.get("planned_calls") != 25
-            or parsed.get("max_calls") != 25 or parsed.get("max_attempts") != 25
+            or parsed.get("max_calls") != 32 or parsed.get("max_attempts") != 54
+            or parsed.get("retry_allowance") != 29
             or parsed.get("task_source") != "context" or parsed.get("requires_approval") is not False
             or parsed.get("approval_source") != "direct_command"):
         raise VerificationError("Native skill default prompt does not invoke the same context tournament")

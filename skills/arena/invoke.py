@@ -41,9 +41,11 @@ def parse_request(message, selected_skill=None):
         raise B.ArenaError("requested agent count is outside the available strategy cards")
     task = match.group(2).strip()
     calls = B.plan_totals(agents)["calls"]
+    attempts = B.original_attempt_budget(agents)
     return {"agents": agents, "task": task,
             "task_source": "inline" if task else "context", "mode": "classic",
-            "planned_calls": calls, "max_calls": calls, "max_attempts": calls,
+            "planned_calls": calls, "max_calls": max(B.DEFAULT_MAX_CALLS, calls),
+            "max_attempts": attempts, "retry_allowance": attempts - calls,
             "requires_approval": False, "approval_source": "direct_command"}
 
 

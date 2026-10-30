@@ -1,6 +1,6 @@
 {
   "name": "arena-openai",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Classic-only native Codex tournaments authorized by one direct command with exact usage accounting.",
   "skills": "./skills/"
 }

@@ -31,7 +31,7 @@ def definition(state, max_attempts=None):
     n, wave = state["agents_n"], state["wave"]
     calls = B.plan_totals(n, wave)["calls"] + int(state["has_baseline"])
     if max_attempts is None:
-        max_attempts = calls
+        max_attempts = B.original_attempt_budget(n, state["has_baseline"])
     if (not 1 <= n <= MAX_AGENTS or not 1 <= wave <= MAX_WAVE
             or type(max_attempts) is not int or not calls <= max_attempts <= min(MAX_CALLS, calls * 3)):
         raise B.ArenaError("invalid approved attempt budget")

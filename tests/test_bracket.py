@@ -212,6 +212,15 @@ class Dealer(unittest.TestCase):
 
 
 class Plan(unittest.TestCase):
+    def test_original_attempt_budget_includes_every_job_retry(self):
+        for n, planned, attempts in ((1, 1, 2), (2, 7, 15), (5, 25, 54), (100, 595, 1289),
+                                     (2160, 12955, 28069)):
+            with self.subTest(agents=n):
+                self.assertEqual(B.plan_totals(n)["calls"], planned)
+                self.assertEqual(B.original_attempt_budget(n), attempts)
+                self.assertEqual(B.original_attempt_budget(n, has_baseline=True), attempts + 3)
+        self.assertEqual(B.DEFAULT_MAX_CALLS, 32)
+
     def test_classic_default_call_counts(self):
         self.assertEqual(B.bracket_sizes(100), [100, 50, 25, 13, 7, 4, 2, 1])
         for n, calls in ((2, 7), (4, 19), (5, 25), (16, 91), (100, 595)):

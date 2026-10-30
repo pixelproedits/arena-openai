@@ -222,8 +222,8 @@ class ApprovalAndCliSecurity(unittest.TestCase):
         with self.assertRaises(B.ArenaError):
             self.G.reserve(self.state, "spawn", "a001.spawn")
 
-    def test_failed_attempts_consume_default_exact_plan_budget(self):
-        job = self.ready_judge()
+    def test_explicit_lower_attempt_budget_still_limits_retries(self):
+        job = self.ready_judge(max_attempts=self.calls)
         ledger = self.G.require_approved(self.state)
         self.assertEqual(ledger["definition"]["max_attempts"], self.calls)
         reserved = self.G.reserve(self.state, "judge", job["id"])
@@ -233,7 +233,7 @@ class ApprovalAndCliSecurity(unittest.TestCase):
         with self.assertRaises(B.ArenaError):
             self.G.reserve(self.state, "judge", job["id"])
 
-    def test_explicit_extra_attempt_budget_allows_bounded_retry(self):
+    def test_explicit_attempt_budget_preserves_per_job_retry_limit(self):
         exact = self.approve(max_attempts=self.calls + 4)
         self.assertEqual(exact["definition"]["max_attempts"], self.calls + 4)
         self.assertEqual(exact["definition"]["calls"], self.calls)
@@ -246,7 +246,7 @@ class ApprovalAndCliSecurity(unittest.TestCase):
         with self.assertRaises(B.ArenaError):
             self.G.reserve(self.state, "spawn", "a001.spawn")
 
-    def complete_phase(self, phase):
+    def complete_phase(self, phase, failures=0):
         B.write_prompts(self.state, phase)
         jobs = B.phase_jobs(self.state, phase)
         for job in jobs:
@@ -261,8 +261,15 @@ class ApprovalAndCliSecurity(unittest.TestCase):
                 verdict = {"match": job["match"], "scores": {job["a"]: score(8), job["b"]: score(7)},
                            "winner": job["a"], "reason": "Synthetic regression only"}
                 output = [json.dumps(verdict)]
+            elif phase == "final":
+                score = lambda n: {name: n for name, _ in B.WEIGHTS}
+                output = [json.dumps({"scores": {"X": score(8), "Y": score(7)},
+                                      "winner": "X", "reason": "Synthetic blind regression only"})]
             else:
                 raise AssertionError("Unexpected synthetic phase")
+            for _ in range(failures):
+                failed = self.G.reserve(self.state, phase, job["id"])
+                self.G.finish(self.state, failed["reservation"])
             reserved = self.G.reserve(self.state, phase, job["id"])
             self.G.finish(self.state, reserved["reservation"], output)
         return jobs
@@ -276,12 +283,12 @@ class ApprovalAndCliSecurity(unittest.TestCase):
         return B.phase_jobs(self.state, "judge")[0]
 
     def test_judge_preserves_original_three_attempt_limit_within_approval(self):
-        job = self.ready_judge(max_attempts=self.calls + 2)
+        job = self.ready_judge()
         for number in range(1, 4):
             reserved = self.G.reserve(self.state, "judge", job["id"])
             self.assertTrue(reserved["reservation"].endswith("#" + str(number)))
             self.G.finish(self.state, reserved["reservation"])
-        with self.assertRaises(B.ArenaError):
+        with self.assertRaisesRegex(B.ArenaError, "retry allowance"):
             self.G.reserve(self.state, "judge", job["id"])
         self.assertEqual(len(self.G.require_approved(self.state)["jobs"]), self.calls + 2)
 
@@ -319,15 +326,68 @@ class ApprovalAndCliSecurity(unittest.TestCase):
             self.G.placeholder(self.state, "judge", "r1-m01.judge")
 
     def test_attempt_budget_is_bound_to_exact_approval_phrase(self):
-        small = self.G.proposal(self.state)
-        large = self.G.proposal(self.state, max_attempts=self.calls + 4)
-        self.assertNotEqual(small["confirmation"], large["confirmation"])
+        default = self.G.proposal(self.state)
+        restricted = self.G.proposal(self.state, max_attempts=self.calls + 4)
+        self.assertNotEqual(default["confirmation"], restricted["confirmation"])
         with self.assertRaises(B.ArenaError):
-            self.G.approve(self.state, small["confirmation"], max_attempts=self.calls + 4)
+            self.G.approve(self.state, default["confirmation"], max_attempts=self.calls + 4)
         for invalid in (self.calls - 1, self.calls * 3 + 1, True, -1):
             with self.subTest(budget=invalid):
                 with self.assertRaises(B.ArenaError):
                     self.G.proposal(self.state, max_attempts=invalid)
+
+    def test_default_original_retries_complete_after_every_job_fails_before_success(self):
+        approved = self.approve()
+        self.assertEqual(approved["definition"]["calls"], 7)
+        self.assertEqual(approved["definition"]["max_attempts"], 15)
+        for phase in ("spawn", "attack", "defend", "judge"):
+            self.assertEqual(B.next_action(self.state)[0], phase)
+            self.complete_phase(phase, failures=2 if phase == "judge" else 1)
+        for command in ("collect", "advance"):
+            result = self.cli(command, "--dir", self.run)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        result = self.cli("winner", "--json", "--dir", self.run)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ledger = self.G.require_approved(self.state)
+        self.assertEqual(ledger["confirmation"], approved["confirmation"])
+        self.assertEqual(len(ledger["jobs"]), 15)
+        self.assertEqual(sum(j["status"] == "failed" for j in ledger["jobs"].values()), 8)
+        self.assertGreater(len(ledger["jobs"]), self.calls)
+
+    def test_default_baseline_allowance_includes_three_final_attempts(self):
+        baseline = self.root / "baseline.md"
+        self.io.write_text(str(baseline), "Synthetic rejected baseline")
+        self.run = self.root / "baseline-run"
+        result = self.cli("init", "--agents", 2, "--task", "Synthetic baseline task",
+                          "--baseline-file", baseline, "--dir", self.run)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.state = B.load_state(SimpleNamespace(dir=str(self.run)))
+        approved = self.approve()
+        self.assertEqual(approved["definition"]["calls"], 8)
+        self.assertEqual(approved["definition"]["max_attempts"], 18)
+        for phase in ("spawn", "attack", "defend", "judge"):
+            self.complete_phase(phase, failures=2 if phase == "judge" else 1)
+        for command in ("collect", "advance"):
+            result = self.cli(command, "--dir", self.run)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.state = B.load_state(SimpleNamespace(dir=str(self.run)))
+        self.assertEqual(B.next_action(self.state)[0], "final")
+        self.complete_phase("final", failures=2)
+        result = self.cli("collect", "--dir", self.run)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        result = self.cli("winner", "--json", "--dir", self.run)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ledger = self.G.require_approved(self.state)
+        self.assertEqual(ledger["confirmation"], approved["confirmation"])
+        self.assertEqual(len(ledger["jobs"]), 18)
+
+    def test_recorded_retry_ceiling_cannot_be_tampered_without_invalidating_approval(self):
+        self.approve()
+        ledger = self.G.require_approved(self.state)
+        ledger["definition"]["max_attempts"] += 1
+        self.io.write_text(str(self.run / "approval.json"), json.dumps(ledger))
+        with self.assertRaises(B.ArenaError):
+            self.G.require_approved(self.state)
 
     def test_synthetic_accounting_enforces_concurrency_and_exact_outputs(self):
         self.state["wave"] = 1
@@ -423,7 +483,7 @@ class ApprovalAndCliSecurity(unittest.TestCase):
         exact = self.G.proposal(self.state)
         self.assertEqual(exact["definition"]["calls"], self.calls)
         self.assertEqual(exact["definition"]["agents"], 2)
-        self.assertEqual(exact["definition"]["max_attempts"], self.calls)
+        self.assertEqual(exact["definition"]["max_attempts"], 15)
         self.assertFalse((self.run / "approval.json").exists())
         self.assertNotEqual(self.cli("prompts", "spawn", "--dir", self.run).returncode, 0)
 
