@@ -47,7 +47,7 @@ SKILL_PATH = os.path.join(HERE, "SKILL.md")
 RUBRIC_PATH = os.path.join(HERE, "rubric.md")
 
 DEFAULT_AGENTS = 4
-DEFAULT_WAVE = 4           # safe fallback; the orchestrator should pass the host capacity
+DEFAULT_WAVE = None        # resolve to the requested competitor count; never silently batch
 DEFAULT_MAX_CALLS = 32     # user may explicitly raise this per tournament
 MAX_AGENTS = 2160          # every distinct card combination shipped by upstream
 MAX_WAVE = MAX_AGENTS
@@ -72,6 +72,15 @@ WEIGHTS = (
 
 class ArenaError(Exception):
     pass
+
+
+def resolve_wave(n, wave=DEFAULT_WAVE):
+    """Default to N concurrent jobs; custom waves are for planning/fixtures."""
+    wave = n if wave is None else wave
+    if (type(n) is not int or not 1 <= n <= MAX_AGENTS
+            or type(wave) is not int or not 1 <= wave <= MAX_WAVE):
+        raise ArenaError("use 1 to %d agents and a wave of 1 to %d" % (MAX_AGENTS, MAX_WAVE))
+    return wave
 
 
 # ---------------------------------------------------------------- the cards
@@ -287,6 +296,7 @@ def _has_output(path):
 def new_state(n, seed, data, run_dir, wave=DEFAULT_WAVE, has_baseline=False, mode="classic"):
     if mode != "classic":
         raise ArenaError("only Classic tournaments are supported")
+    wave = resolve_wave(n, wave)
     run_dir = os.path.abspath(run_dir)
     ids = agent_ids(n)
     agents = {}
@@ -935,6 +945,7 @@ def next_action(state):
 def plan_rows(n, wave=DEFAULT_WAVE, mode="classic"):
     if mode != "classic":
         raise ArenaError("only Classic tournaments are supported")
+    wave = resolve_wave(n, wave)
     rows = []
     for rnd, alive in enumerate(bracket_sizes(n)[:-1], start=1):
         m = alive // 2
@@ -946,10 +957,11 @@ def plan_rows(n, wave=DEFAULT_WAVE, mode="classic"):
 
 
 def plan_totals(n, wave=DEFAULT_WAVE, mode="classic"):
+    wave = resolve_wave(n, wave)
     rows = plan_rows(n, wave, mode)
     calls = n + sum(r["calls"] for r in rows)
     waves = math.ceil(n / wave) + sum(r["waves"] for r in rows)
-    return {"agents": n, "rounds": len(rows), "calls": calls, "waves": waves, "rows": rows}
+    return {"agents": n, "wave": wave, "rounds": len(rows), "calls": calls, "waves": waves, "rows": rows}
 
 
 def original_attempt_budget(n, has_baseline=False):
@@ -1205,17 +1217,16 @@ def _agents_arg(args):
 
 def cmd_plan(args):
     n = _agents_arg(args)
-    if not 1 <= n <= MAX_AGENTS or not 1 <= args.wave <= MAX_WAVE:
-        raise ArenaError("use 1 to %d agents and a wave of 1 to %d" % (MAX_AGENTS, MAX_WAVE))
+    wave = resolve_wave(n, args.wave)
     mode = "classic"
-    t = plan_totals(n, args.wave, mode)
+    t = plan_totals(n, wave, mode)
     if args.json:
         print(json.dumps(t, indent=1))
         return 0
-    print("%d agents, %d rounds, %s mode, waves of %d" % (n, t["rounds"], mode, args.wave))
+    print("%d agents, %d rounds, %s mode, waves of %d" % (n, t["rounds"], mode, wave))
     print("")
     print("  round  alive  matches  bye  sub-agent calls  waves")
-    print("  spawn  %5d  %7s  %3s  %15d  %5d" % (n, "-", "-", n, math.ceil(n / args.wave)))
+    print("  spawn  %5d  %7s  %3s  %15d  %5d" % (n, "-", "-", n, math.ceil(n / wave)))
     for r in t["rows"]:
         print("  %5d  %5d  %7d  %3s  %15d  %5d"
               % (r["round"], r["alive"], r["matches"], "yes" if r["bye"] else "-", r["calls"], r["waves"]))
@@ -1228,8 +1239,9 @@ def cmd_plan(args):
 
 def cmd_init(args):
     n = _agents_arg(args)
-    if not 1 <= args.wave <= MAX_WAVE:
-        raise ArenaError("--wave must be between 1 and %d" % MAX_WAVE)
+    wave = resolve_wave(n, args.wave)
+    if not args.offline_fixture and wave != n:
+        raise ArenaError("live Arena requires wave=N: requested concurrency must match the competitor count")
     if not 1 <= args.max_calls <= MAX_PLANNED_CALLS:
         raise ArenaError("--max-calls must be between 1 and %d" % MAX_PLANNED_CALLS)
     data = load_strategies()
@@ -1250,7 +1262,7 @@ def cmd_init(args):
         if not baseline:
             raise ArenaError("the baseline file is empty")
     mode = "classic"
-    totals = plan_totals(n, args.wave, mode)
+    totals = plan_totals(n, wave, mode)
     planned_calls = totals["calls"] + (1 if baseline else 0)
     if planned_calls > args.max_calls:
         raise ArenaError(
@@ -1267,7 +1279,7 @@ def cmd_init(args):
     if baseline:
         SIO.write_text(os.path.join(d, "baseline.md"), baseline + "\n", replace=False)
     SIO.write_text(os.path.join(d, "rubric.md"), SIO.read_text(RUBRIC_PATH), replace=False)
-    state = new_state(n, seed, data, d, wave=args.wave, has_baseline=bool(baseline), mode=mode)
+    state = new_state(n, seed, data, d, wave=wave, has_baseline=bool(baseline), mode=mode)
     state["offline_fixture"] = bool(args.offline_fixture)
     state["max_calls"] = args.max_calls
     save_state(state)
@@ -1280,7 +1292,7 @@ def cmd_init(args):
           % (seed, n, mode, n, combo_count(data)))
     print("%d rounds (%s). %d sub-agent calls in %d waves of %d%s."
           % (t["rounds"], " -> ".join(str(s) for s in bracket_sizes(n)), t["calls"] + (1 if baseline else 0),
-             t["waves"] + (1 if baseline else 0), args.wave, ", including the final check" if baseline else ""))
+             t["waves"] + (1 if baseline else 0), wave, ", including the final check" if baseline else ""))
     print("next: %s" % _cmd("next"))
     return 0
 
@@ -1569,7 +1581,7 @@ def build_parser():
     s.add_argument("--task", help="the task as a string, instead of --task-file")
     s.add_argument("--baseline-file", help="the answer the user was not satisfied with")
     s.add_argument("--wave", type=int, default=DEFAULT_WAVE,
-                   help="parallel sub-agents per wave (default %d)" % DEFAULT_WAVE)
+                   help="parallel jobs per wave (default: N; live runs require N)")
     s.add_argument("--max-calls", type=int, default=DEFAULT_MAX_CALLS,
                    help="refuse larger runs unless this limit is explicitly raised (default %d)" % DEFAULT_MAX_CALLS)
     s.set_defaults(func=cmd_init)

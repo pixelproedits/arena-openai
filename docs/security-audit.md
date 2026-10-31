@@ -149,6 +149,16 @@ stops the run before model work. The orchestrator does not invent limits or
 require undocumented metadata: if a relevant limit is not exposed, briefly
 disclose uncertainty and proceed with a bounded candidate/judge pool, reported
 concurrency and the guarded attempt budget, stopping on a real capacity error.
+Version 0.3.9 additionally binds the user's short command N to requested
+concurrency N: parser metadata carries N, default planning/initialization uses
+wave=N, and live initialization plus guard approval refuse a different wave.
+The orchestrator must dispatch available phase batches up to N and stop before
+workers when reported concurrent-turn capacity cannot support N competitors.
+Custom smaller waves remain valid only for planning and permanently offline
+fixtures. Historical records are preserved; an update never authorizes resuming
+an interrupted run or retroactively changes its wave. Exact wall-clock overlap
+depends on host scheduling, so metadata or reservations cannot prove that N
+workers were simultaneously executing.
 These lifecycle and role-mapping checks are trusted-orchestrator duties, not new
 guard fields or a claim that local Python enforces native thread isolation. No
 field shrink, omitted phase, backend switch or unplanned replacement schedule is

@@ -29,6 +29,8 @@ def definition(state, max_attempts=None):
     if state.get("mode", "classic") != "classic":
         raise B.ArenaError("only Classic tournament approval is supported")
     n, wave = state["agents_n"], state["wave"]
+    if not state.get("offline_fixture") and wave != n:
+        raise B.ArenaError("live Arena requires wave=N; do not reduce the requested concurrency")
     calls = B.plan_totals(n, wave)["calls"] + int(state["has_baseline"])
     if max_attempts is None:
         max_attempts = B.original_attempt_budget(n, state["has_baseline"])

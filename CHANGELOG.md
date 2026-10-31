@@ -1,3 +1,10 @@
+# Hardened fork 0.3.9
+
+- Bind the short command N to both N competitors and requested concurrency N, including native menu selections.
+- Default planning/initialization to wave=N; reject different live waves at initialization and guard approval instead of silently batching.
+- Require actual capacity preflight and available phase batches up to N; report a real blocker rather than reducing the wave. Keep custom wave calculations and fixtures permanently model-free.
+- Preserve Classic phases, independent candidate identities, separate judges, retry allowances, explicit-only routing and security protections.
+
 # Hardened fork 0.3.8
 
 - Restore the original 32 planned-call default and automatic computed ceiling for an explicitly requested field.

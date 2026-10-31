@@ -110,6 +110,7 @@ def verify_routing(skill, cwd, codex, rendered):
     for message, agents, calls, arguments in positives:
         parsed = _run_json([sys.executable, str(helper)] + arguments, cwd=cwd, input_text=message)
         if (not isinstance(parsed, dict) or parsed.get("agents") != agents
+                or parsed.get("requested_concurrency") != agents or parsed.get("wave") != agents
                 or parsed.get("mode") != "classic" or parsed.get("planned_calls") != calls
                 or parsed.get("max_calls") != max(32, calls)
                 or parsed.get("max_attempts") != 13 * agents - 11
@@ -127,6 +128,7 @@ def verify_routing(skill, cwd, codex, rendered):
         raise VerificationError("Native skill default prompt is not a supported quoted string") from None
     parsed = _run_json([sys.executable, str(helper)], cwd=cwd, input_text=default_prompt)
     if (not isinstance(parsed, dict) or parsed.get("agents") != 5
+            or parsed.get("requested_concurrency") != 5 or parsed.get("wave") != 5
             or parsed.get("mode") != "classic" or parsed.get("planned_calls") != 25
             or parsed.get("max_calls") != 32 or parsed.get("max_attempts") != 54
             or parsed.get("retry_allowance") != 29
@@ -159,6 +161,7 @@ def verify_routing(skill, cwd, codex, rendered):
     return {
         "explicit_text_alias_routing_loaded": True,
         "explicit_alias_parser_controls_passed": True,
+        "requested_parallelism_parser_passed": True,
         "native_default_prompt_parser_passed": True,
         "native_menu_link_parser_passed": True,
         "native_selected_skill_parser_passed": True,

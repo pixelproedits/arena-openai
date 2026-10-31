@@ -104,10 +104,11 @@ class CodexVerification(unittest.TestCase):
             block = VERIFY._routing_block(VERIFY.ROUTING_TEMPLATE.read_text())
             (home / "AGENTS.md").write_text(block)
             rendered = [{"role": "user", "content": [{"text": "# AGENTS.md instructions\n" + block}]}]
-            valid = {"agents": 5, "mode": "classic", "planned_calls": 25,
+            valid = {"agents": 5, "requested_concurrency": 5, "wave": 5, "mode": "classic", "planned_calls": 25,
                      "max_calls": 32, "max_attempts": 54, "retry_allowance": 29,
                      "requires_approval": False, "approval_source": "direct_command"}
-            for changed in ({"requires_approval": True}, {"approval_source": "worker"},
+            for changed in ({"requested_concurrency": 4}, {"wave": 4}, {"wave": None},
+                            {"requires_approval": True}, {"approval_source": "worker"},
                             {"approval_source": None}, {"max_attempts": 25}, {"max_attempts": 55},
                             {"max_calls": 25}, {"max_calls": 33}, {"retry_allowance": 0}):
                 with self.subTest(changed=changed), mock.patch.object(

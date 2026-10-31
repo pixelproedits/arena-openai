@@ -390,13 +390,14 @@ class ApprovalAndCliSecurity(unittest.TestCase):
             self.G.require_approved(self.state)
 
     def test_synthetic_accounting_enforces_concurrency_and_exact_outputs(self):
-        self.state["wave"] = 1
-        B.save_state(self.state)
         self.approve()
         B.write_prompts(self.state, "spawn")
         first = self.G._reserve_attempt(self.state, "spawn", "a001.spawn")
+        second = self.G._reserve_attempt(self.state, "spawn", "a002.spawn")
+        self.assertEqual(second["reservation"], "spawn:a002.spawn#1")
+        self.assertEqual(sum(j["status"] == "reserved" for j in self.G.require_approved(self.state)["jobs"].values()), 2)
         with self.assertRaises(B.ArenaError):
-            self.G._reserve_attempt(self.state, "spawn", "a002.spawn")
+            self.G._reserve_attempt(self.state, "spawn", "a001.spawn")
         for bad in (["x", "extra"], {"/outside/path": "text"}, ["x" * (self.G.MAX_OUTPUT_BYTES + 1)], [""]):
             with self.subTest(output_type=type(bad).__name__):
                 with self.assertRaises(B.ArenaError):
@@ -405,8 +406,6 @@ class ApprovalAndCliSecurity(unittest.TestCase):
         result = self.G.finish(self.state, first["reservation"], ["Synthetic solution"])
         self.assertEqual(result["status"], "complete")
         self.assertEqual(self.io.read_text(str(self.run / "r0" / "a001.md")), "Synthetic solution")
-        second = self.G._reserve_attempt(self.state, "spawn", "a002.spawn")
-        self.assertEqual(second["reservation"], "spawn:a002.spawn#1")
         with self.assertRaises(B.ArenaError):
             self.G.finish(self.state, first["reservation"], ["Overwrite"])
 
